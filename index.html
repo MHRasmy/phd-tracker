@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>PhD Application Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: an admissions ledger — a deadline column on the left of every row, the work on the right; tabs switch between ledgers. */
+:root{
+  --bg:#F3F5F4; --surface:#FFFFFF; --sunk:#E8ECEA; --line:#D3D9D6;
+  --fg:#17212B; --muted:#5B6873; --accent:#1D5C86; --accent-soft:#DCE8F1;
+  --due:#B83A26; --due-soft:#F6E0DB; --warn:#9A6A00; --warn-soft:#F5EBCF; --ok:#2F7A4E; --ok-soft:#DCEEE2;
+  --display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12181D; --surface:#1A2229; --sunk:#222C34; --line:#2F3B45;
+  --fg:#E4EAEE; --muted:#93A1AC; --accent:#6FB0DD; --accent-soft:#1E3343;
+  --due:#F08672; --due-soft:#3B211C; --warn:#E2B74F; --warn-soft:#352C15; --ok:#71C493; --ok-soft:#1A3326; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12181D; --surface:#1A2229; --sunk:#222C34; --line:#2F3B45;
+  --fg:#E4EAEE; --muted:#93A1AC; --accent:#6FB0DD; --accent-soft:#1E3343;
+  --due:#F08672; --due-soft:#3B211C; --warn:#E2B74F; --warn-soft:#352C15; --ok:#71C493; --ok-soft:#1A3326; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--body);margin:0}
+.wrap{max-width:1080px;margin:0 auto;padding-inline:16px;padding-block:28px 64px;display:grid;gap:22px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0}
+h1{font-size:clamp(28px,5vw,40px);font-weight:700;letter-spacing:-.01em;line-height:1.05}
+.eyebrow{font:500 12px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+header{display:flex;flex-wrap:wrap;gap:16px 28px;align-items:end;justify-content:space-between}
+header .lead{display:grid;gap:8px;min-width:0}
+.next{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--due);padding:12px 16px;border-radius:6px;min-width:0;display:grid;gap:2px}
+.next b{font:600 18px/1.2 var(--display)}
+.stats{display:flex;flex-wrap:wrap;gap:10px 28px;border-block:1px solid var(--line);padding-block:12px}
+.stat{display:grid;gap:2px}.stat .n{font:600 22px/1 var(--mono)}
+nav{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+nav button{all:unset;cursor:pointer;padding:10px 14px;font:600 15px var(--display);letter-spacing:.02em;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-1px}
+nav button[aria-selected="true"]{color:var(--fg);border-color:var(--accent)}
+nav button:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.btn{font:500 14px var(--body);border:1px solid var(--line);background:var(--surface);color:var(--fg);padding:7px 12px;border-radius:6px;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.btn.ghost{background:transparent}
+.btn.danger{color:var(--due);border-color:var(--due)}
+.list{display:grid;gap:10px}
+.row{display:grid;grid-template-columns:132px minmax(0,1fr);background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.row .when{padding:14px;border-right:1px solid var(--line);display:grid;align-content:start;gap:4px;background:var(--sunk)}
+.when .date{font:500 15px var(--mono)}
+.when .left{font:600 13px var(--mono)}
+.left.due{color:var(--due)}.left.soon{color:var(--warn)}.left.later{color:var(--muted)}.left.past{color:var(--muted);text-decoration:line-through}
+.row .body{padding:14px 16px;display:grid;gap:10px;min-width:0}
+.top{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:baseline;justify-content:space-between}
+.top h3{font-size:19px;font-weight:600}
+.sub{color:var(--muted);font-size:14px}
+.pill{font:500 12px/1 var(--mono);padding:5px 8px;border-radius:999px;background:var(--sunk);color:var(--muted);white-space:nowrap}
+.pill.Drafting{background:var(--warn-soft);color:var(--warn)}
+.pill.Submitted,.pill.Offer{background:var(--ok-soft);color:var(--ok)}
+.pill.Interview{background:var(--accent-soft);color:var(--accent)}
+.pill.Rejected,.pill.Withdrawn{background:var(--sunk);color:var(--muted);text-decoration:line-through}
+.pill.est{background:var(--due-soft);color:var(--due)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:13px;padding:3px 9px;border:1px solid var(--line);border-radius:4px}
+.checks{display:flex;flex-wrap:wrap;gap:6px}
+.check{display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:4px 9px;border-radius:4px;border:1px dashed var(--line);cursor:pointer;user-select:none;background:transparent;color:var(--muted)}
+.check.on{border-style:solid;border-color:var(--ok);color:var(--ok);background:var(--ok-soft)}
+.check .box{width:12px;height:12px;border:1.5px solid currentColor;border-radius:2px;display:inline-grid;place-items:center;font-size:10px;line-height:1}
+.progress{height:4px;background:var(--sunk);border-radius:2px;overflow:hidden}.progress i{display:block;height:100%;background:var(--ok)}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px 18px;padding:10px 12px;background:var(--sunk);border-radius:6px}
+.facts>div{display:grid;gap:4px;min-width:0;font-size:14px}
+.facts .ok{color:var(--ok)}
+.pill.w-Granted,.pill.w-Nofee{background:var(--ok-soft);color:var(--ok)}
+.pill.w-Torequest{background:var(--warn-soft);color:var(--warn)}
+.pill.w-Requested{background:var(--accent-soft);color:var(--accent)}
+.pill.w-Denied,.pill.w-Noteligible{background:var(--surface);color:var(--muted)}
+.notes{font-size:14px;color:var(--muted);white-space:pre-wrap;max-width:68ch}
+.foot{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;font-size:13px}
+.foot a{color:var(--accent)}
+#filter{width:auto}
+.empty{border:1px dashed var(--line);border-radius:8px;padding:28px;text-align:center;color:var(--muted);display:grid;gap:6px}
+.matrix{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font:600 13px var(--display);letter-spacing:.03em;color:var(--muted);white-space:nowrap}
+td select{font:13px var(--body);background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:3px 4px}
+td select.submitted{border-color:var(--ok);color:var(--ok)} td select.requested{border-color:var(--warn);color:var(--warn)}
+.tl{display:grid;gap:0;border-left:2px solid var(--line);margin-left:6px}
+.tl .ev{display:grid;grid-template-columns:110px minmax(0,1fr);gap:12px;padding:10px 0 10px 18px;position:relative}
+.tl .ev::before{content:"";position:absolute;left:-7px;top:16px;width:12px;height:12px;border-radius:50%;background:var(--surface);border:2px solid var(--muted)}
+.tl .ev.kind-deadline::before{border-color:var(--due)}.tl .ev.kind-letters::before{border-color:var(--warn)}.tl .ev.kind-milestone::before{border-color:var(--accent)}
+.tl .ev.past{opacity:.5}
+.tl .today{padding:6px 0 6px 18px;font:600 12px var(--mono);color:var(--accent);letter-spacing:.06em}
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--fg);padding:0;width:min(620px,calc(100vw - 32px));max-height:calc(100vh - 48px)}
+dialog::backdrop{background:rgba(10,16,22,.45)}
+dialog form{display:grid;gap:14px;padding:20px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+label{display:grid;gap:4px;font-size:13px;color:var(--muted)}
+input,select,textarea{font:15px var(--body);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px;width:100%}
+textarea{min-height:80px;resize:vertical}
+.dlg-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between}
+.hint{font-size:13px;color:var(--muted)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:14px}
+@media (max-width:620px){
+  .row{grid-template-columns:1fr}
+  .row .when{border-right:0;border-bottom:1px solid var(--line);grid-auto-flow:column;justify-content:start;gap:14px;align-items:baseline}
+  .tl .ev{grid-template-columns:1fr;gap:2px}
+}
+@media (prefers-reduced-motion:no-preference){.progress i{transition:width .3s ease}}
+[hidden]{display:none!important}
+.account{display:flex;gap:10px;align-items:center;justify-content:flex-end;font-size:13px;color:var(--muted);min-height:32px}
+.empty .btn{justify-self:center;margin-top:6px}
+.empty code{font-family:var(--mono);font-size:13px}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="account" id="account"></div>
+  <header>
+    <div class="lead">
+      <span class="eyebrow">Fall 2027 entry · cycle opened Oct 2026</span>
+      <h1>PhD Application Tracker</h1>
+    </div>
+    <div class="next" id="next"><span class="eyebrow">Next deadline</span><b>Loading…</b></div>
+  </header>
+
+  <div class="stats" id="stats"></div>
+
+  <nav role="tablist">
+    <button role="tab" data-tab="programs" aria-selected="true">Programs</button>
+    <button role="tab" data-tab="letters" aria-selected="false">Letters</button>
+    <button role="tab" data-tab="faculty" aria-selected="false">Faculty</button>
+    <button role="tab" data-tab="timeline" aria-selected="false">Timeline</button>
+  </nav>
+
+  <section id="tab-programs">
+    <div class="bar" style="margin-bottom:12px">
+      <span class="hint">Sorted by deadline. Tap a checklist item to tick it off.</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <select id="filter" class="btn" aria-label="Filter by status"><option value="active">Active only</option><option value="all">All programs</option></select>
+        <button class="btn primary" data-add="programs">Add program</button>
+      </div>
+    </div>
+    <div class="list" id="programs"></div>
+  </section>
+
+  <section id="tab-letters" hidden>
+    <div class="bar" style="margin-bottom:12px">
+      <span class="hint">Most programs want three letters. Set each cell as you send invitations and letters land.</span>
+      <button class="btn primary" data-add="recommenders">Add recommender</button>
+    </div>
+    <div id="letters"></div>
+  </section>
+
+  <section id="tab-faculty" hidden>
+    <div class="bar" style="margin-bottom:12px">
+      <span class="hint">Who you want to work with, and where each conversation stands.</span>
+      <button class="btn primary" data-add="faculty">Add faculty</button>
+    </div>
+    <div class="list" id="faculty"></div>
+  </section>
+
+  <section id="tab-timeline" hidden>
+    <div class="bar" style="margin-bottom:12px">
+      <span class="hint">Every application deadline, letter deadline and your own milestones in one line.</span>
+      <button class="btn primary" data-add="milestones">Add milestone</button>
+    </div>
+    <div id="timeline"></div>
+  </section>
+</div>
+
+<dialog id="dlg"><form id="dlgForm" method="dialog"></form></dialog>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+const STATUSES=["Researching","Drafting","Submitted","Interview","Offer","Rejected","Withdrawn"];
+const CHECKS=[["sop","SoP"],["cv","CV"],["essays","Extra essays"],["transcripts","Transcripts"],["english","English test"],["letters","Letters in"],["fee","Fee paid"]];
+const CONTACT=["Not contacted","Emailed","Replied","Met / talked","Supervisor","Not taking students"];
+const LETTER=["—","Asked","Agreed","Requested","Submitted"];
+const WAIVER=["Not checked","Not eligible","To request","Requested","Granted","Denied","No fee"];
+const state={programs:[],faculty:[],recommenders:[],milestones:[],loaded:false};
+let db=null,editable=true,tab="programs";
+try{const t=localStorage.getItem("phd-tab");if(t)tab=t}catch(e){}
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function daysLeft(d){if(!d)return null;const end=new Date(d+"T23:59:59");return Math.ceil((end-new Date())/864e5)}
+function fmtDate(d){if(!d)return "No date";const x=new Date(d+"T12:00:00");return x.toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"})}
+function leftLabel(n){if(n==null)return["",""];if(n<0)return["past",`${-n}d ago`];if(n===0)return["due","Today"];return[n<=14?"due":n<=35?"soon":"later",`${n} days`]}
+function toast(m){const t=$("#toast");t.textContent=m;t.hidden=false;clearTimeout(t._h);t._h=setTimeout(()=>t.hidden=true,2200)}
+function lettersLine(p){
+  const rs=state.recommenders.filter(r=>{const v=(r.letters||{})[p.id];return v&&v!=="—"});
+  if(!rs.length)return `<span class="hint">No recommenders assigned yet</span>`;
+  const sub=rs.filter(r=>r.letters[p.id]==="Submitted").length;
+  return `<b class="mono ${sub===rs.length?"ok":""}">${sub}/${rs.length} submitted</b> <span class="hint">${rs.map(r=>esc(r.name)+": "+esc(r.letters[p.id])).join(" · ")}</span>`;
+}
+function waiverCls(p){if(["Requested","Granted","Denied","Not eligible"].includes(p.waiverStatus))return "hint";const n=daysLeft(p.waiverDeadline);return n!=null&&n<=14?"left due":"hint"}
+const active=p=>!["Rejected","Withdrawn"].includes(p.status);
+const progName=id=>{const p=state.programs.find(x=>x.id===id);return p?p.name:"Unknown program"};
+
+function render(){
+  if(!state.loaded){
+    const msgs={
+      config:`<div class="empty"><b>Firebase isn't connected yet</b><span>Paste your Firebase web config into <code>firebaseConfig</code> near the bottom of <code>index.html</code>, then reload.</span></div>`,
+      signedout:`<div class="empty"><b>Sign in to open your tracker</b><span>Your programs, letters and contacts are saved to your Google account through Firebase.</span><button class="btn primary" data-signin>Sign in with Google</button></div>`,
+      loading:`<div class="empty"><b>Loading your applications…</b><span>Programs, letters and contacts appear here in a moment.</span></div>`,
+      error:`<div class="empty"><b>Couldn't reach your saved data</b><span>${esc(authError)}</span></div>`
+    };
+    $("#programs").innerHTML=msgs[phase]||msgs.loading;
+    ["letters","faculty","timeline"].forEach(k=>$("#"+k).innerHTML="");
+    $("#next").innerHTML=`<span class="eyebrow">Next deadline</span><b>—</b>`;$("#stats").innerHTML="";
+    return;
+  }
+  renderHeader();renderPrograms();renderLetters();renderFaculty();renderTimeline();
+}
+function renderHeader(){
+  const up=state.programs.filter(p=>active(p)&&p.status!=="Submitted"&&daysLeft(p.deadline)>=0).sort((a,b)=>a.deadline.localeCompare(b.deadline));
+  const n=up[0];
+  $("#next").innerHTML=n?`<span class="eyebrow">Next deadline · ${esc(leftLabel(daysLeft(n.deadline))[1])}</span><b>${esc(n.name)}</b><span class="mono sub">${fmtDate(n.deadline)}${n.deadlineNote?" · "+esc(n.deadlineNote):""}</span>`
+    :`<span class="eyebrow">Next deadline</span><b>Nothing pending</b>`;
+  const act=state.programs.filter(active);
+  const sub=act.filter(p=>["Submitted","Interview","Offer"].includes(p.status)).length;
+  let letterOut=0;state.recommenders.forEach(r=>Object.values(r.letters||{}).forEach(v=>{if(v&&v!=="—"&&v!=="Submitted")letterOut++}));
+  const items=act.length*CHECKS.length,done=act.reduce((s,p)=>s+CHECKS.filter(([k])=>p.checklist&&p.checklist[k]).length,0);
+  $("#stats").innerHTML=[["Programs",act.length],["Submitted",sub],["Letters outstanding",letterOut],["Checklist done",items?Math.round(done/items*100)+"%":"—"]]
+    .map(([l,v])=>`<div class="stat"><span class="eyebrow">${l}</span><span class="n">${v}</span></div>`).join("");
+}
+function renderPrograms(){
+  const f=$("#filter").value;
+  const list=state.programs.filter(p=>f==="all"||active(p)).sort((a,b)=>(a.deadline||"9").localeCompare(b.deadline||"9"));
+  if(!list.length){$("#programs").innerHTML=state.programs.length?`<div class="empty"><b>No active programs</b><span>Switch the filter to “All programs” to see withdrawn and rejected ones.</span></div>`
+    :`<div class="empty"><b>No programs yet</b><span>Add the first program you're applying to with “Add program”, or load a few sample programs, recommenders and faculty to see how the tracker works. The names and dates are placeholders to replace with your own.</span><button class="btn primary" data-seed>Load sample data</button></div>`;return}
+  $("#programs").innerHTML=list.map(p=>{
+    const [cls,lbl]=leftLabel(daysLeft(p.deadline));
+    const ck=p.checklist||{};const done=CHECKS.filter(([k])=>ck[k]).length;
+    const advisors=(p.advisors||"").split(",").map(s=>s.trim()).filter(Boolean);
+    return `<article class="row">
+      <div class="when"><span class="date">${fmtDate(p.deadline)}</span><span class="left ${p.status==="Submitted"?"later":cls}">${p.status==="Submitted"?"Sent":esc(lbl)}</span>
+        <span class="sub mono" title="Recommendation letters due">Letters ${p.lettersDue?fmtDate(p.lettersDue).replace(/, \d{4}$/,""):"same day"}</span></div>
+      <div class="body">
+        <div class="top"><div style="min-width:0"><h3>${esc(p.name)}</h3><div class="sub">${esc(p.school||"")}${p.deadlineNote?" · "+esc(p.deadlineNote):""}</div></div>
+          <div class="chips">${p.estimated?`<span class="pill est" title="Based on last cycle's date; confirm on the program site">Date to confirm</span>`:""}<span class="pill ${esc(p.status)}">${esc(p.status)}</span></div></div>
+        ${advisors.length?`<div class="chips">${advisors.map(a=>`<span class="chip">${esc(a)}</span>`).join("")}</div>`:""}
+        <div class="checks">${CHECKS.map(([k,l])=>`<button class="check ${ck[k]?"on":""}" data-check="${esc(p.id)}" data-k="${k}" aria-pressed="${!!ck[k]}"><span class="box">${ck[k]?"✓":""}</span>${l}</button>`).join("")}</div>
+        <div class="progress" aria-label="${done} of ${CHECKS.length} done"><i style="width:${done/CHECKS.length*100}%"></i></div>
+        <div class="facts">
+          <div><span class="eyebrow">Letters</span><span>${lettersLine(p)}</span></div>
+          <div><span class="eyebrow">Fee waiver</span><span><span class="pill w-${esc((p.waiverStatus||"Not checked").replace(/ /g,""))}">${esc(p.waiverStatus||"Not checked")}</span>${p.waiverDeadline?` <span class="mono ${waiverCls(p)}">request by ${fmtDate(p.waiverDeadline).replace(/, \d{4}$/,"")}</span>`:""}</span>${p.waiverNotes?`<span class="hint">${esc(p.waiverNotes)}</span>`:""}</div>
+        </div>
+        ${p.notes?`<div class="notes">${esc(p.notes)}</div>`:""}
+        <div class="foot">${p.fee?`<span class="mono">Fee ${esc(p.fee)}</span>`:""}${p.url?`<a href="${esc(p.url)}" target="_blank" rel="noopener">Program page ↗</a>`:""}
+          <button class="btn ghost" data-edit="programs" data-id="${esc(p.id)}">Edit</button></div>
+      </div></article>`}).join("");
+}
+function renderLetters(){
+  const progs=state.programs.filter(active).sort((a,b)=>(a.deadline||"9").localeCompare(b.deadline||"9"));
+  if(!state.recommenders.length){$("#letters").innerHTML=`<div class="empty"><b>No recommenders yet</b><span>Add the people writing your letters with “Add recommender”.</span></div>`;return}
+  const head=`<tr><th>Recommender</th>${progs.map(p=>`<th title="${esc(p.name)}">${esc(p.short||p.name)}<div class="sub mono" style="font-weight:400">${p.lettersDue?fmtDate(p.lettersDue).replace(/, \d{4}$/,""):fmtDate(p.deadline).replace(/, \d{4}$/,"")}</div></th>`).join("")}<th></th></tr>`;
+  const rows=state.recommenders.map(r=>`<tr><td><b>${esc(r.name)}</b><div class="sub">${esc(r.role||"")}</div>${r.notes?`<div class="hint" style="max-width:28ch">${esc(r.notes)}</div>`:""}</td>
+    ${progs.map(p=>{const v=(r.letters||{})[p.id]||"—";return `<td><select data-letter="${esc(r.id)}" data-p="${esc(p.id)}" class="${v==="Submitted"?"submitted":v==="Requested"?"requested":""}" aria-label="${esc(r.name)} letter for ${esc(p.name)}">${LETTER.map(o=>`<option ${o===v?"selected":""}>${o}</option>`).join("")}</select></td>`}).join("")}
+    <td><button class="btn ghost" data-edit="recommenders" data-id="${esc(r.id)}">Edit</button></td></tr>`).join("");
+  const n=state.recommenders.length;
+  $("#letters").innerHTML=`<div class="matrix"><table>${head}${rows}</table></div>${n<3?`<p class="hint">${3-n} more recommender${3-n>1?"s":""} needed for the usual three letters.</p>`:""}`;
+}
+function renderFaculty(){
+  if(!state.faculty.length){$("#faculty").innerHTML=`<div class="empty"><b>No faculty yet</b><span>Add a potential advisor with “Add faculty”.</span></div>`;return}
+  $("#faculty").innerHTML=state.faculty.slice().sort((a,b)=>(a.institution||"").localeCompare(b.institution||"")).map(f=>`<article class="row">
+    <div class="when"><span class="eyebrow">${esc(f.institution||"")}</span>${f.lastContact?`<span class="sub mono">Last ${fmtDate(f.lastContact).replace(/, \d{4}$/,"")}</span>`:""}</div>
+    <div class="body"><div class="top"><div><h3>${esc(f.name)}</h3><div class="sub">${f.programId?esc(progName(f.programId)):""}</div></div>
+      <span class="pill ${f.contact==="Met / talked"||f.contact==="Replied"||f.contact==="Supervisor"?"Interview":""}">${esc(f.contact||"Not contacted")}</span></div>
+      ${f.fit?`<div class="notes"><b style="color:var(--fg)">Fit:</b> ${esc(f.fit)}</div>`:""}
+      ${f.notes?`<div class="notes">${esc(f.notes)}</div>`:""}
+      <div class="foot"><button class="btn ghost" data-edit="faculty" data-id="${esc(f.id)}">Edit</button></div></div></article>`).join("");
+}
+function renderTimeline(){
+  const ev=[];
+  state.programs.filter(active).forEach(p=>{if(p.deadline)ev.push({d:p.deadline,kind:"deadline",t:`${p.name} application due`,s:p.deadlineNote||""});
+    if(p.lettersDue)ev.push({d:p.lettersDue,kind:"letters",t:`${p.name} letters due`,s:"Recommenders submit"});
+    if(p.waiverDeadline&&!["Not eligible","Granted","Denied","No fee"].includes(p.waiverStatus))ev.push({d:p.waiverDeadline,kind:"letters",t:`${p.name} fee waiver request`,s:p.waiverStatus||""})});
+  state.milestones.forEach(m=>ev.push({d:m.date,kind:"milestone",t:m.title,s:m.notes||"",id:m.id}));
+  ev.sort((a,b)=>(a.d||"").localeCompare(b.d||""));
+  if(!ev.length){$("#timeline").innerHTML=`<div class="empty"><b>Nothing dated yet</b><span>Deadlines appear here as you add programs.</span></div>`;return}
+  const today=new Date().toISOString().slice(0,10);let placed=false;
+  $("#timeline").innerHTML=`<div class="tl">${ev.map(e=>{let pre="";if(!placed&&e.d>=today){placed=true;pre=`<div class="today">TODAY · ${fmtDate(today)}</div>`}
+    const n=daysLeft(e.d);return pre+`<div class="ev kind-${e.kind} ${n<0?"past":""}"><span class="mono">${fmtDate(e.d)}</span><div><b>${esc(e.t)}</b> <span class="sub">${esc(e.s)}</span>
+      ${e.id?` <button class="btn ghost" style="padding:2px 8px;font-size:12px" data-edit="milestones" data-id="${esc(e.id)}">Edit</button>`:""}</div></div>`}).join("")}${placed?"":`<div class="today">TODAY · ${fmtDate(today)}</div>`}</div>`;
+}
+
+/* ---------- editing ---------- */
+const FORMS={
+  programs:[["name","Program","text"],["school","University / department","text"],["short","Short name (letters table)","text"],["status","Status","select",STATUSES],["deadline","Application deadline","date"],["deadlineNote","Deadline time / zone","text"],["lettersDue","Letters due (if different)","date"],["advisors","Target advisors (comma separated)","text"],["fee","Application fee","text"],["waiverStatus","Fee waiver","select",WAIVER],["waiverDeadline","Waiver request deadline","date"],["waiverNotes","Fee waiver details","area"],["url","Program page link","text"],["estimated","Date still to confirm","check"],["notes","Notes","area"]],
+  faculty:[["name","Name","text"],["institution","Institution","text"],["programId","Program","program"],["contact","Contact status","select",CONTACT],["lastContact","Last contact","date"],["fit","Research fit","area"],["notes","Notes","area"]],
+  recommenders:[["name","Name","text"],["role","Relationship","text"],["notes","Notes","area"]],
+  milestones:[["title","Milestone","text"],["date","Date","date"],["notes","Notes","text"]]
+};
+const TITLES={programs:"program",faculty:"faculty member",recommenders:"recommender",milestones:"milestone"};
+function openForm(coll,id){
+  if(!db){toast("Sign in to save changes");return}
+  const item=id?state[coll].find(x=>x.id===id):{};
+  const f=$("#dlgForm");let armed=false;
+  f.innerHTML=`<h2 style="font-size:22px">${id?"Edit":"Add"} ${TITLES[coll]}</h2><div class="grid2">${FORMS[coll].map(([k,l,t,opts])=>{
+    const v=item[k]??"";const fid=`f-${coll}-${k}`;
+    if(t==="area")return `<label style="grid-column:1/-1" for="${fid}">${l}<textarea id="${fid}" name="${k}">${esc(v)}</textarea></label>`;
+    if(t==="select")return `<label for="${fid}">${l}<select id="${fid}" name="${k}">${opts.map(o=>`<option ${o===v?"selected":""}>${o}</option>`).join("")}</select></label>`;
+    if(t==="program")return `<label for="${fid}">${l}<select id="${fid}" name="${k}"><option value="">—</option>${state.programs.map(p=>`<option value="${esc(p.id)}" ${p.id===v?"selected":""}>${esc(p.name)}</option>`).join("")}</select></label>`;
+    if(t==="check")return `<label for="${fid}" style="display:flex;gap:8px;align-items:center;align-self:end"><input type="checkbox" id="${fid}" name="${k}" style="width:auto" ${v?"checked":""}>${l}</label>`;
+    return `<label for="${fid}">${l}<input id="${fid}" type="${t}" name="${k}" value="${esc(v)}"></label>`}).join("")}</div>
+    <div class="dlg-actions"><div>${id?`<button type="button" class="btn danger" id="del">Delete</button>`:""}</div>
+    <div style="display:flex;gap:8px"><button type="button" class="btn" id="cancel">Cancel</button><button class="btn primary" type="submit">Save</button></div></div>`;
+  $("#cancel").onclick=()=>$("#dlg").close();
+  if(id)$("#del").onclick=async e=>{if(!armed){armed=true;e.target.textContent="Confirm delete";return}
+    try{await db.collection(coll).doc(id).delete();$("#dlg").close();toast("Deleted")}catch(err){toast("Couldn't delete: "+err.message)}};
+  f.onsubmit=async e=>{e.preventDefault();const fd=new FormData(f);const out={};
+    FORMS[coll].forEach(([k,,t])=>{out[k]=t==="check"?fd.get(k)==="on":(fd.get(k)||"").toString().trim()});
+    if(!(out.name||out.title)){toast("Give it a name first");return}
+    try{if(id)await db.collection(coll).doc(id).update(out);
+      else{if(coll==="programs")out.checklist={};if(coll==="recommenders")out.letters={};await db.collection(coll).add(out)}
+      $("#dlg").close();toast("Saved")}catch(err){toast("Couldn't save: "+err.message)}};
+  $("#dlg").showModal();
+}
+
+document.addEventListener("click",async e=>{
+  const t=e.target.closest("button");if(!t)return;
+  if(t.dataset.tab){tab=t.dataset.tab;try{localStorage.setItem("phd-tab",tab)}catch(e){}showTab();return}
+  if(t.dataset.signin!==undefined)return signIn();
+  if(t.dataset.signout!==undefined)return auth.signOut();
+  if(t.dataset.seed!==undefined){if(!fs)return toast("Sample data is already in this browser");return loadSeed(t)}
+  if(t.dataset.add)return openForm(t.dataset.add);
+  if(t.dataset.edit)return openForm(t.dataset.edit,t.dataset.id);
+  if(t.dataset.check){if(!db)return toast("Sign in to save changes");
+    const p=state.programs.find(x=>x.id===t.dataset.check);const ck={...(p.checklist||{})};ck[t.dataset.k]=!ck[t.dataset.k];
+    try{await db.collection("programs").doc(p.id).update({checklist:ck})}catch(err){toast("Couldn't save: "+err.message)}}
+});
+document.addEventListener("change",async e=>{
+  const s=e.target;
+  if(s.id==="filter")return renderPrograms();
+  if(s.dataset.letter){const r=state.recommenders.find(x=>x.id===s.dataset.letter);const letters={...(r.letters||{})};letters[s.dataset.p]=s.value;
+    try{await db.collection("recommenders").doc(r.id).update({letters})}catch(err){toast("Couldn't save: "+err.message)}}
+});
+function showTab(){document.querySelectorAll("nav button").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab===tab));
+  ["programs","letters","faculty","timeline"].forEach(k=>$("#tab-"+k).hidden=k!==tab)}
+
+
+/* ---------- Firebase ---------- */
+// Paste your config from Firebase console → Project settings → Your apps → Web app.
+const firebaseConfig = {
+  apiKey: "AIzaSyAMMCHWSMic9OC8WFS4Ro51mHZu2KvZaCg",
+  authDomain: "phd-application-tracker-6e750.firebaseapp.com",
+  projectId: "phd-application-tracker-6e750",
+  storageBucket: "phd-application-tracker-6e750.firebasestorage.app",
+  messagingSenderId: "283098228072",
+  appId: "1:283098228072:web:60e911f39ec93c051622dd",
+  measurementId: "G-M747TX65HC"
+};
+
+let phase="loading",authError="",auth=null,fs=null,unsubs=[];
+function setAccount(u){
+  $("#account").innerHTML=u?`<span>${esc(u.email||u.displayName||"Signed in")}</span><button class="btn ghost" data-signout>Sign out</button>`:"";
+}
+async function signIn(){
+  try{await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider())}
+  catch(err){
+    if(err.code==="auth/popup-blocked"||err.code==="auth/operation-not-supported-in-this-environment"){auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider());return}
+    if(err.code!=="auth/popup-closed-by-user"&&err.code!=="auth/cancelled-popup-request")toast("Sign-in failed: "+(err.message||err.code));
+  }
+}
+function stopListening(){unsubs.forEach(u=>u());unsubs=[]}
+function startListening(uid){
+  stopListening();
+  db={collection:c=>fs.collection(`users/${uid}/${c}`)};
+  const seen=new Set();
+  ["programs","faculty","recommenders","milestones"].forEach(c=>{
+    unsubs.push(db.collection(c).onSnapshot(snap=>{
+      state[c]=snap.docs.map(d=>({id:d.id,...d.data()}));seen.add(c);
+      if(seen.size===4)state.loaded=true;render();
+    },err=>{
+      phase="error";state.loaded=false;
+      authError=err.code==="permission-denied"?"Firestore refused access. Check that the security rules from the README are published.":(err.message||"Unknown error");
+      render();
+    }));
+  });
+}
+
+const SEED={
+ programs:{
+  "oxford-cs":{name:"Oxford DPhil in Computer Science",short:"Oxford",school:"University of Oxford, Department of Computer Science",status:"Drafting",deadline:"2026-12-02",deadlineNote:"12:00 noon UK time (sample)",lettersDue:"2026-12-02",advisors:"Prof. Jane Doe",fee:"",url:"",estimated:true,
+   waiverStatus:"To request",waiverDeadline:"2026-11-18",waiverNotes:"Sample entry: note here who qualifies and how to request the waiver.",
+   notes:"Sample program. Replace the dates, fee and link with the ones on the official program page."},
+  "berkeley-eecs":{name:"UC Berkeley EECS PhD",short:"Berkeley",school:"Electrical Engineering & Computer Sciences",status:"Researching",deadline:"2026-12-08",deadlineNote:"8:59 pm PT (sample)",lettersDue:"2026-12-15",advisors:"Prof. John Roe, Dr. Alex Sample",fee:"",url:"",estimated:true,
+   waiverStatus:"Not checked",waiverDeadline:"",waiverNotes:"",
+   notes:"Sample program. Letters can be set to a later date than the application when the program allows it."},
+  "epfl-edic":{name:"EPFL EDIC PhD",short:"EPFL",school:"EPFL, Computer and Communication Sciences",status:"Researching",deadline:"2026-12-15",deadlineNote:"Sample date",lettersDue:"",advisors:"",fee:"",url:"",estimated:true,
+   waiverStatus:"No fee",waiverDeadline:"",waiverNotes:"",
+   notes:"Sample program with no advisor picked yet."},
+  "princeton-cs":{name:"Princeton CS PhD",short:"Princeton",school:"Computer Science",status:"Researching",deadline:"2026-12-15",deadlineNote:"11:59 pm ET (sample)",lettersDue:"",advisors:"Prof. Sam Placeholder",fee:"",url:"",estimated:true,
+   waiverStatus:"Not checked",waiverDeadline:"",waiverNotes:"",
+   notes:"Sample program. Edit or delete it once you've added your own."}
+ },
+ recommenders:{
+  "rec-1":{name:"Prof. Maria Example",role:"MSc thesis supervisor",notes:"Sample recommender. Prefers three weeks' notice.",letters:{"oxford-cs":"Agreed","berkeley-eecs":"Asked"}},
+  "rec-2":{name:"Dr. Chris Sample",role:"Research internship mentor",notes:"Sample recommender.",letters:{"oxford-cs":"Asked"}},
+  "rec-3":{name:"Prof. Pat Placeholder",role:"Undergraduate course instructor",notes:"Sample recommender.",letters:{}}
+ },
+ faculty:{
+  doe:{name:"Prof. Jane Doe",institution:"Oxford",programId:"oxford-cs",contact:"Emailed",lastContact:"2026-10-05",fit:"Sample: one line on why your work fits this group.",notes:"Sample entry. Follow up if no reply in two weeks."},
+  roe:{name:"Prof. John Roe",institution:"UC Berkeley",programId:"berkeley-eecs",contact:"Not contacted",lastContact:"",fit:"",notes:"Sample entry."},
+  placeholder:{name:"Prof. Sam Placeholder",institution:"Princeton",programId:"princeton-cs",contact:"Met / talked",lastContact:"2026-09-20",fit:"",notes:"Sample entry: met at a workshop poster session."}
+ },
+ milestones:{
+  "sop-draft":{title:"Finish first SoP draft",date:"2026-10-25",notes:"Sample milestone"},
+  "english-test":{title:"Take English test",date:"2026-11-07",notes:"Sample milestone: scores can take two weeks to arrive"}
+ }
+};
+async function loadSeed(btn){
+  if(!db)return toast("Sign in first");
+  btn.disabled=true;btn.textContent="Loading…";
+  try{
+    const b=fs.batch();
+    Object.entries(SEED).forEach(([c,docs])=>Object.entries(docs).forEach(([id,d])=>{
+      b.set(db.collection(c).doc(id),c==="programs"?{checklist:{},...d}:d);
+    }));
+    await b.commit();toast("Sample data loaded");
+  }catch(err){btn.disabled=false;btn.textContent="Load sample data";toast("Couldn't load: "+err.message)}
+}
+
+/* ---------- Local mode: used until Firebase is configured, or when opened as a file ---------- */
+const LS_KEY="phd-tracker-v1";
+function seedCopy(){const out={};Object.entries(SEED).forEach(([c,docs])=>{out[c]={};Object.entries(docs).forEach(([id,d])=>{const x=JSON.parse(JSON.stringify(d));out[c][id]=c==="programs"?{checklist:{},...x}:x})});return out}
+function startLocal(){
+  let data=null,persist=true;
+  try{data=JSON.parse(localStorage.getItem(LS_KEY)||"null")}catch(e){persist=false}
+  if(!data)data=seedCopy();
+  const subs={};
+  const snap=c=>({docs:Object.entries(data[c]||{}).map(([id,d])=>({id,data:()=>d}))});
+  const commit=c=>{if(persist){try{localStorage.setItem(LS_KEY,JSON.stringify(data))}catch(e){persist=false;toast("This browser won't keep changes")}}(subs[c]||[]).forEach(fn=>fn(snap(c)))};
+  db={collection:c=>{data[c]=data[c]||{};return{
+    onSnapshot(fn){(subs[c]=subs[c]||[]).push(fn);setTimeout(()=>fn(snap(c)),0);return()=>{subs[c]=subs[c].filter(f=>f!==fn)}},
+    doc:id=>({update:async o=>{data[c][id]={...data[c][id],...o};commit(c)},set:async o=>{data[c][id]=o;commit(c)},delete:async()=>{delete data[c][id];commit(c)}}),
+    add:async o=>{data[c][Date.now().toString(36)+Math.random().toString(36).slice(2,6)]=o;commit(c)}
+  }}};
+  $("#account").innerHTML=`<span>${persist?"Saved in this browser only":"Not saving: this browser blocks storage"} · set up Firebase (see README) to sync across devices</span>`;
+  const seen=new Set();
+  ["programs","faculty","recommenders","milestones"].forEach(c=>db.collection(c).onSnapshot(sn=>{state[c]=sn.docs.map(d=>({id:d.id,...d.data()}));seen.add(c);if(seen.size===4)state.loaded=true;render()}));
+}
+
+showTab();
+if(typeof firebase==="undefined"||firebaseConfig.apiKey.startsWith("PASTE")||location.protocol==="file:"){startLocal()}
+else{
+  firebase.initializeApp(firebaseConfig);
+  auth=firebase.auth();fs=firebase.firestore();
+  auth.getRedirectResult().catch(err=>toast("Sign-in failed: "+(err.message||err.code)));
+  auth.onAuthStateChanged(u=>{
+    setAccount(u);state.loaded=false;
+    if(u){phase="loading";render();startListening(u.uid)}
+    else{stopListening();db=null;Object.assign(state,{programs:[],faculty:[],recommenders:[],milestones:[]});phase="signedout";render()}
+  });
+  render();
+}
+</script>
+</body>
+</html>
