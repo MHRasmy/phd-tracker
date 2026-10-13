@@ -126,6 +126,16 @@ textarea{min-height:80px;resize:vertical}
 .outreach{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted)}
 .outreach b{color:var(--fg);font-weight:500}
 .empty code{font-family:var(--mono);font-size:13px}
+.combo{position:relative;display:block}
+.combo input{padding-right:30px;text-overflow:ellipsis}
+.combo-caret{all:unset;position:absolute;right:0;top:0;bottom:0;width:30px;display:grid;place-items:center;cursor:default;color:var(--fg)}
+.combo-caret svg{display:block}
+.combo-list{position:fixed;z-index:10;overflow-y:auto;overscroll-behavior:contain;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:4px 0;box-shadow:0 6px 20px rgba(10,16,22,.28);font:13px/1.3 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--fg);scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.combo-opt{padding:4px 12px 4px 26px;margin:0 4px;border-radius:4px;cursor:default;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:relative}
+.combo-opt.cur::before{content:"✓";position:absolute;left:8px}
+.combo-opt[aria-selected="true"]{background:var(--accent);color:var(--surface)}
+.combo-opt b{font-weight:600}
+.combo-empty{padding:4px 12px 4px 26px;color:var(--muted)}
 </style>
 </head>
 <body>
@@ -349,6 +359,36 @@ const FORMS={
   milestones:[["title","Milestone","text"],["date","Date","date"],["notes","Notes","text"]]
 };
 const TITLES={programs:"program",faculty:"faculty member",recommenders:"recommender",milestones:"milestone"};
+function setupCombo(inp,opts){
+  const box=inp.parentNode.querySelector(".combo-list"),caret=inp.parentNode.querySelector(".combo-caret");let items=[],idx=-1;
+  const place=()=>{const r=inp.getBoundingClientRect(),below=innerHeight-r.bottom-12,above=r.top-12,up=below<160&&above>below;
+    box.style.left=r.left+"px";box.style.width=r.width+"px";box.style.maxHeight=Math.max(96,Math.min(264,up?above:below))+"px";
+    box.style.top=up?"auto":(r.bottom+4)+"px";box.style.bottom=up?(innerHeight-r.top+4)+"px":"auto"};
+  const close=()=>{box.hidden=true;idx=-1;inp.setAttribute("aria-expanded","false");inp.removeAttribute("aria-activedescendant")};
+  const mark=scroll=>{box.querySelectorAll(".combo-opt").forEach((c,i)=>{c.setAttribute("aria-selected",i===idx);if(i===idx){inp.setAttribute("aria-activedescendant",c.id);if(scroll)c.scrollIntoView({block:"nearest"})}})};
+  const show=all=>{const q=all?"":inp.value.trim().toLowerCase(),cur=inp.value.trim();
+    items=q?[...opts.filter(o=>o.toLowerCase().startsWith(q)),...opts.filter(o=>o.toLowerCase().indexOf(q)>0)]:opts;
+    box.innerHTML=items.length?items.map((o,i)=>{const at=q?o.toLowerCase().indexOf(q):-1;
+      return `<span class="combo-opt${o===cur?" cur":""}" style="display:block" role="option" id="${inp.id}-o${i}" data-i="${i}" aria-selected="false">${at<0?esc(o):esc(o.slice(0,at))+"<b>"+esc(o.slice(at,at+q.length))+"</b>"+esc(o.slice(at+q.length))}</span>`}).join("")
+      :`<span class="combo-empty" style="display:block">Not in the list. It will be saved as you typed it.</span>`;
+    box.hidden=false;box.scrollTop=0;inp.setAttribute("aria-expanded","true");place();
+    idx=all?items.indexOf(inp.value.trim()):-1;if(idx>=0)mark(true)};
+  const pick=i=>{inp.value=items[i];close()};
+  inp.addEventListener("input",()=>show(false));
+  inp.addEventListener("click",()=>{if(box.hidden)show(true)});
+  inp.addEventListener("blur",close);
+  inp.addEventListener("keydown",e=>{
+    if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();if(box.hidden){show(true);return}if(!items.length)return;
+      idx=e.key==="ArrowDown"?(idx+1)%items.length:(idx<=0?items.length:idx)-1;mark(true)}
+    else if(e.key==="Enter"&&!box.hidden&&idx>=0){e.preventDefault();pick(idx)}
+    else if(e.key==="Escape"&&!box.hidden){e.preventDefault();close()}});
+  caret.addEventListener("mousedown",e=>e.preventDefault());
+  caret.addEventListener("click",e=>{e.preventDefault();if(box.hidden){inp.focus();show(true)}else close()});
+  box.addEventListener("mousedown",e=>e.preventDefault());
+  box.addEventListener("click",e=>{e.preventDefault();const o=e.target.closest(".combo-opt");if(o)pick(+o.dataset.i)});
+  box.addEventListener("mousemove",e=>{const o=e.target.closest(".combo-opt");if(o&&+o.dataset.i!==idx){idx=+o.dataset.i;mark(false)}});
+  $("#dlg").onscroll=()=>{if(!box.hidden)place()};
+}
 function openForm(coll,id){
   if(!db){toast("Sign in to save changes");return}
   const item=id?state[coll].find(x=>x.id===id):{};
@@ -358,13 +398,13 @@ function openForm(coll,id){
     if(t==="area")return `<label style="grid-column:1/-1" for="${fid}">${l}<textarea id="${fid}" name="${k}">${esc(v)}</textarea></label>`;
     if(t==="select")return `<label for="${fid}">${l}<select id="${fid}" name="${k}">${opts.map(o=>`<option ${o===v?"selected":""}>${o}</option>`).join("")}</select></label>`;
     if(t==="program")return `<label for="${fid}">${l}<select id="${fid}" name="${k}"><option value="">—</option>${state.programs.map(p=>`<option value="${esc(p.id)}" ${p.id===v?"selected":""}>${esc(p.name)}</option>`).join("")}</select></label>`;
-    if(t==="inst"){const used=state.faculty.map(x=>(x.institution||"").trim()).filter(Boolean);
-      return `<label for="${fid}">${l}<input id="${fid}" type="text" name="${k}" value="${esc(v)}" list="${fid}-list" autocomplete="off" placeholder="Type or pick from the list"><datalist id="${fid}-list">${[...new Set([...used,...INSTITUTIONS])].map(o=>`<option value="${esc(o)}"></option>`).join("")}</datalist></label>`}
+    if(t==="inst")return `<label for="${fid}">${l}<span class="combo"><input id="${fid}" type="text" name="${k}" value="${esc(v)}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${fid}-list" placeholder="Type or pick from the list" data-combo><button type="button" class="combo-caret" tabindex="-1" aria-label="Show institutions"><svg width="10" height="7" viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 1.5l5 5 5-5"/></svg></button><span class="combo-list" id="${fid}-list" role="listbox" hidden></span></span></label>`;
     if(t==="check")return `<label for="${fid}" style="display:flex;gap:8px;align-items:center;align-self:end"><input type="checkbox" id="${fid}" name="${k}" style="width:auto" ${v?"checked":""}>${l}</label>`;
     return `<label for="${fid}">${l}<input id="${fid}" type="${t}" name="${k}" value="${esc(v)}"></label>`}).join("")}</div>
     <div class="dlg-actions"><div>${id?`<button type="button" class="btn danger" id="del">Delete</button>`:""}</div>
     <div style="display:flex;gap:8px"><button type="button" class="btn" id="cancel">Cancel</button><button class="btn primary" type="submit">Save</button></div></div>`;
   $("#cancel").onclick=()=>$("#dlg").close();
+  f.querySelectorAll("[data-combo]").forEach(i=>setupCombo(i,[...new Set([...state.faculty.map(x=>(x.institution||"").trim()).filter(Boolean),...INSTITUTIONS])]));
   if(id)$("#del").onclick=async e=>{if(!armed){armed=true;e.target.textContent="Confirm delete";return}
     try{await db.collection(coll).doc(id).delete();$("#dlg").close();toast("Deleted")}catch(err){toast("Couldn't delete: "+err.message)}};
   f.onsubmit=async e=>{e.preventDefault();const fd=new FormData(f);const out={};
