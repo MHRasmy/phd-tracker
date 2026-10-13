@@ -145,6 +145,16 @@ textarea{min-height:80px;resize:vertical}
 .opt input{width:auto;margin:0;flex:none}
 .opt .mono{margin-left:auto;color:var(--muted);font-size:13px;white-space:nowrap}
 .fac-insts{display:grid;gap:5px}
+.reorder{display:inline-flex;gap:4px;align-items:center;margin-left:auto}
+.btn.mv{padding:2px 9px;font-size:13px;line-height:1.5}
+.btn:disabled{opacity:.35;cursor:default}
+.grip{cursor:grab;color:var(--muted);padding:2px 7px;font-size:15px;letter-spacing:-3px;user-select:none;border-radius:4px}
+.grip:hover{color:var(--fg);background:var(--sunk)}
+.grip:active{cursor:grabbing}
+.row.dragging{opacity:.4}
+.row.drop-before{box-shadow:0 -3px 0 var(--accent)}
+.row.drop-after{box-shadow:0 3px 0 var(--accent)}
+@media (pointer:coarse){.grip{display:none}}
 .fac-insts .eyebrow{line-height:1.3}
 .chip .left{font:600 12px var(--mono);margin-left:4px}
 </style>
@@ -191,7 +201,7 @@ textarea{min-height:80px;resize:vertical}
 
   <section id="tab-faculty" hidden>
     <div class="bar" style="margin-bottom:12px">
-      <span class="hint">Faculty you want to work with: who to email, who replied, and when to follow up.</span>
+      <span class="hint">Grouped by priority. Use the arrows, or drag the handle, to order people within a priority.</span>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn" data-paste-faculty>Paste a list</button>
         <button class="btn primary" data-add="faculty">Add faculty</button>
@@ -248,6 +258,17 @@ function waiverCls(p){if(["Requested","Granted","Denied","Not eligible"].include
 const active=p=>!["Rejected","Withdrawn"].includes(p.status);
 const facInsts=f=>Array.isArray(f.institutions)?f.institutions:(f.institution?[f.institution]:[]);
 const facProgs=f=>(Array.isArray(f.programIds)?f.programIds:(f.programId?[f.programId]:[])).map(id=>state.programs.find(p=>p.id===id)).filter(Boolean).sort((a,b)=>(a.deadline||"9").localeCompare(b.deadline||"9"));
+const facPrio=f=>f.priority||"Medium";
+const facCmp=(a,b)=>(PRIORITY.indexOf(facPrio(a))-PRIORITY.indexOf(facPrio(b)))||((a.order??1e9)-(b.order??1e9))||facInsts(a).join().localeCompare(facInsts(b).join())||(a.name||"").localeCompare(b.name||"");
+let facShown=[],dragId=null;
+async function moveFaculty(id,targetId,after){
+  if(!db)return toast("Sign in to save changes");
+  const me=state.faculty.find(f=>f.id===id),tg=state.faculty.find(f=>f.id===targetId);
+  if(!me||!tg||me===tg||facPrio(me)!==facPrio(tg))return;
+  const g=state.faculty.filter(f=>facPrio(f)===facPrio(me)).sort(facCmp).filter(f=>f!==me);
+  g.splice(g.indexOf(tg)+(after?1:0),0,me);
+  try{await Promise.all(g.map((f,i)=>f.order===i?null:db.collection("faculty").doc(f.id).update({order:i})))}catch(err){toast("Couldn't save: "+err.message)}
+}
 const tagChip=(k,v)=>`<span class="chip tag">${esc(v)}<input type="hidden" name="${k}" value="${esc(v)}"><button type="button" data-rmchip aria-label="Remove ${esc(v)}">×</button></span>`;
 const progName=id=>{const p=state.programs.find(x=>x.id===id);return p?p.name:"Unknown program"};
 
@@ -330,14 +351,14 @@ function renderFaculty(){
   if(!all.length){$("#faculty").innerHTML=`<div class="empty"><b>No faculty yet</b><span>Add a potential advisor with “Add faculty”, or paste your whole list at once with “Paste a list”.</span></div>`;return}
   const match={all:()=>true,toEmail:f=>["Not contacted","To email"].includes(f.contact||"Not contacted"),awaiting:f=>AWAITING.includes(f.contact),
     talking:f=>["Replied","Meeting scheduled","Met / talked","Supervisor"].includes(f.contact),due:followUpDue,closed:f=>CLOSED.includes(f.contact)&&f.contact!=="Supervisor"}[facFilter]||(()=>true);
-  const pr=f=>PRIORITY.indexOf(f.priority||"Medium");
-  const list=all.filter(match).sort((a,b)=>(followUpDue(b)-followUpDue(a))||(pr(a)-pr(b))||facInsts(a).join().localeCompare(facInsts(b).join())||(a.name||"").localeCompare(b.name||""));
+  const list=facShown=all.filter(match).sort(facCmp);
   if(!list.length){$("#faculty").innerHTML=`<div class="empty"><b>Nobody in this group</b><span>Pick another group above.</span></div>`;return}
-  $("#faculty").innerHTML=list.map(f=>{
+  $("#faculty").innerHTML=list.map((f,i)=>{
     const fu=f.followUp?leftLabel(daysLeft(f.followUp)):null;
     const showFu=f.followUp&&!CLOSED.includes(f.contact)&&!["Replied","Meeting scheduled","Met / talked"].includes(f.contact);
     const warm=["Replied","Meeting scheduled","Met / talked","Supervisor"].includes(f.contact);
-    return `<article class="row">
+    const up=list[i-1]&&facPrio(list[i-1])===facPrio(f),down=list[i+1]&&facPrio(list[i+1])===facPrio(f);
+    return `<article class="row" data-fid="${esc(f.id)}" data-prio="${esc(facPrio(f))}">
     <div class="when"><div class="fac-insts">${facInsts(f).map(i=>`<span class="eyebrow">${esc(i)}</span>`).join("")}</div>
       ${showFu?`<span class="sub mono">Follow up</span><span class="left ${followUpDue(f)?"due":daysLeft(f.followUp)<=3?"soon":"later"}">${fmtDate(f.followUp).replace(/, \d{4}$/,"")}${followUpDue(f)?" · due":""}</span>`:""}
       ${f.lastContact?`<span class="sub mono">Last ${fmtDate(f.lastContact).replace(/, \d{4}$/,"")}</span>`:""}</div>
@@ -350,7 +371,7 @@ function renderFaculty(){
       ${f.firstEmailed||f.replyDate?`<div class="outreach">${f.firstEmailed?`<span>First emailed <b class="mono">${fmtDate(f.firstEmailed)}</b></span>`:""}${f.replyDate?`<span>Replied <b class="mono">${fmtDate(f.replyDate)}</b></span>`:""}</div>`:""}
       ${f.fit?`<div class="notes"><b style="color:var(--fg)">Fit:</b> ${esc(f.fit)}</div>`:""}
       ${f.notes?`<div class="notes">${esc(f.notes)}</div>`:""}
-      <div class="foot">${["Not contacted","To email"].includes(f.contact||"Not contacted")?`<button class="btn" data-emailed="${esc(f.id)}">Mark emailed today</button>`:""}${AWAITING.includes(f.contact)?`<button class="btn" data-replied="${esc(f.id)}">Mark replied</button>`:""}<button class="btn ghost" data-edit="faculty" data-id="${esc(f.id)}">Edit</button></div></div></article>`}).join("");
+      <div class="foot">${["Not contacted","To email"].includes(f.contact||"Not contacted")?`<button class="btn" data-emailed="${esc(f.id)}">Mark emailed today</button>`:""}${AWAITING.includes(f.contact)?`<button class="btn" data-replied="${esc(f.id)}">Mark replied</button>`:""}<button class="btn ghost" data-edit="faculty" data-id="${esc(f.id)}">Edit</button>${up||down?`<span class="reorder"><button class="btn ghost mv" data-move="up" data-id="${esc(f.id)}" title="Move up" aria-label="Move ${esc(f.name)} up" ${up?"":"disabled"}>↑</button><button class="btn ghost mv" data-move="down" data-id="${esc(f.id)}" title="Move down" aria-label="Move ${esc(f.name)} down" ${down?"":"disabled"}>↓</button><span class="grip" draggable="true" data-grip="${esc(f.id)}" title="Drag to reorder within this priority" aria-hidden="true">⋮⋮</span></span>`:""}</div></div></article>`}).join("");
 }
 function renderTimeline(){
   const ev=[];
@@ -477,12 +498,22 @@ document.addEventListener("click",async e=>{
     try{await db.collection("faculty").doc(f.id).update({contact:"Emailed",firstEmailed:f.firstEmailed||today,lastContact:today,followUp:fu});toast("Marked emailed · follow-up set for 10 days")}catch(err){toast("Couldn't save: "+err.message)}return}
   if(t.dataset.replied){if(!db)return toast("Sign in to save changes");const today=new Date().toISOString().slice(0,10);
     try{await db.collection("faculty").doc(t.dataset.replied).update({contact:"Replied",replyDate:today,lastContact:today});toast("Marked replied")}catch(err){toast("Couldn't save: "+err.message)}return}
+  if(t.dataset.move){const i=facShown.findIndex(f=>f.id===t.dataset.id),n=facShown[i+(t.dataset.move==="up"?-1:1)];if(n)moveFaculty(t.dataset.id,n.id,t.dataset.move==="down");return}
   if(t.dataset.add)return openForm(t.dataset.add);
   if(t.dataset.edit)return openForm(t.dataset.edit,t.dataset.id);
   if(t.dataset.check){if(!db)return toast("Sign in to save changes");
     const p=state.programs.find(x=>x.id===t.dataset.check);const ck={...(p.checklist||{})};ck[t.dataset.k]=!ck[t.dataset.k];
     try{await db.collection("programs").doc(p.id).update({checklist:ck})}catch(err){toast("Couldn't save: "+err.message)}}
 });
+const clearDrop=()=>document.querySelectorAll(".drop-before,.drop-after").forEach(x=>x.classList.remove("drop-before","drop-after"));
+document.addEventListener("dragstart",e=>{const g=e.target.closest&&e.target.closest("[data-grip]");if(!g)return;dragId=g.dataset.grip;const row=g.closest(".row");
+  e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",dragId);e.dataTransfer.setDragImage(row,24,24);setTimeout(()=>row.classList.add("dragging"),0)});
+document.addEventListener("dragover",e=>{if(!dragId)return;clearDrop();const row=e.target.closest&&e.target.closest("[data-fid]"),me=state.faculty.find(f=>f.id===dragId);
+  if(!row||!me||row.dataset.fid===dragId||row.dataset.prio!==facPrio(me))return;
+  e.preventDefault();e.dataTransfer.dropEffect="move";const r=row.getBoundingClientRect();row.classList.add(e.clientY<r.top+r.height/2?"drop-before":"drop-after")});
+document.addEventListener("drop",e=>{if(!dragId)return;const row=e.target.closest&&e.target.closest("[data-fid]");
+  if(row&&(row.classList.contains("drop-before")||row.classList.contains("drop-after"))){e.preventDefault();moveFaculty(dragId,row.dataset.fid,row.classList.contains("drop-after"))}});
+document.addEventListener("dragend",()=>{dragId=null;clearDrop();document.querySelectorAll(".dragging").forEach(x=>x.classList.remove("dragging"))});
 document.addEventListener("change",async e=>{
   const s=e.target;
   if(s.id==="filter")return renderPrograms();
