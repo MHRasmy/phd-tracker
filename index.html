@@ -112,6 +112,19 @@ textarea{min-height:80px;resize:vertical}
 [hidden]{display:none!important}
 .account{display:flex;gap:10px;align-items:center;justify-content:flex-end;font-size:13px;color:var(--muted);min-height:32px}
 .empty .btn{justify-self:center;margin-top:6px}
+.fac-summary{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.fac-summary button{all:unset;cursor:pointer;font:500 13px var(--body);padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--fg)}
+.fac-summary button b{font-family:var(--mono);margin-right:6px}
+.fac-summary button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.fac-summary button.alert b{color:var(--due)}
+.pill.prio-High{background:var(--due-soft);color:var(--due)}
+.pill.prio-Medium{background:var(--warn-soft);color:var(--warn)}
+.pill.rec-Yes{background:var(--ok-soft);color:var(--ok)}
+.pill.rec-No{text-decoration:line-through}
+.contact-line{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;align-items:center}
+.contact-line .mono{user-select:all}
+.outreach{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted)}
+.outreach b{color:var(--fg);font-weight:500}
 .empty code{font-family:var(--mono);font-size:13px}
 </style>
 </head>
@@ -157,9 +170,13 @@ textarea{min-height:80px;resize:vertical}
 
   <section id="tab-faculty" hidden>
     <div class="bar" style="margin-bottom:12px">
-      <span class="hint">Who you want to work with, and where each conversation stands.</span>
-      <button class="btn primary" data-add="faculty">Add faculty</button>
+      <span class="hint">Faculty you want to work with: who to email, who replied, and when to follow up.</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" data-paste-faculty>Paste a list</button>
+        <button class="btn primary" data-add="faculty">Add faculty</button>
+      </div>
     </div>
+    <div class="fac-summary" id="facSummary"></div>
     <div class="list" id="faculty"></div>
   </section>
 
@@ -181,7 +198,12 @@ textarea{min-height:80px;resize:vertical}
 <script>
 const STATUSES=["Researching","Drafting","Submitted","Interview","Offer","Rejected","Withdrawn"];
 const CHECKS=[["sop","SoP"],["cv","CV"],["essays","Extra essays"],["transcripts","Transcripts"],["english","English test"],["letters","Letters in"],["fee","Fee paid"]];
-const CONTACT=["Not contacted","Emailed","Replied","Met / talked","Supervisor","Not taking students"];
+const CONTACT=["Not contacted","To email","Emailed","Followed up","Replied","Meeting scheduled","Met / talked","Supervisor","No reply","Not taking students"];
+const PRIORITY=["High","Medium","Low"];
+const RECRUITING=["Unknown","Yes","Maybe","No"];
+const AWAITING=["Emailed","Followed up"];
+const CLOSED=["Supervisor","No reply","Not taking students"];
+let facFilter="all";
 const LETTER=["—","Asked","Agreed","Requested","Submitted"];
 const WAIVER=["Not checked","Not eligible","To request","Requested","Granted","Denied","No fee"];
 const state={programs:[],faculty:[],recommenders:[],milestones:[],loaded:false};
@@ -268,15 +290,40 @@ function renderLetters(){
   const n=state.recommenders.length;
   $("#letters").innerHTML=`<div class="matrix"><table>${head}${rows}</table></div>${n<3?`<p class="hint">${3-n} more recommender${3-n>1?"s":""} needed for the usual three letters.</p>`:""}`;
 }
+function followUpDue(f){return f.followUp&&AWAITING.concat(["Not contacted","To email"]).includes(f.contact||"Not contacted")&&daysLeft(f.followUp)<=0}
 function renderFaculty(){
-  if(!state.faculty.length){$("#faculty").innerHTML=`<div class="empty"><b>No faculty yet</b><span>Add a potential advisor with “Add faculty”.</span></div>`;return}
-  $("#faculty").innerHTML=state.faculty.slice().sort((a,b)=>(a.institution||"").localeCompare(b.institution||"")).map(f=>`<article class="row">
-    <div class="when"><span class="eyebrow">${esc(f.institution||"")}</span>${f.lastContact?`<span class="sub mono">Last ${fmtDate(f.lastContact).replace(/, \d{4}$/,"")}</span>`:""}</div>
-    <div class="body"><div class="top"><div><h3>${esc(f.name)}</h3><div class="sub">${f.programId?esc(progName(f.programId)):""}</div></div>
-      <span class="pill ${f.contact==="Met / talked"||f.contact==="Replied"||f.contact==="Supervisor"?"Interview":""}">${esc(f.contact||"Not contacted")}</span></div>
+  const all=state.faculty;
+  const groups={
+    all:["All",all.length],
+    toEmail:["To email",all.filter(f=>["Not contacted","To email"].includes(f.contact||"Not contacted")).length],
+    awaiting:["Awaiting reply",all.filter(f=>AWAITING.includes(f.contact)).length],
+    talking:["In conversation",all.filter(f=>["Replied","Meeting scheduled","Met / talked","Supervisor"].includes(f.contact)).length],
+    due:["Follow-up due",all.filter(followUpDue).length],
+    closed:["Closed",all.filter(f=>CLOSED.includes(f.contact)&&f.contact!=="Supervisor").length]
+  };
+  $("#facSummary").innerHTML=all.length?Object.entries(groups).map(([k,[l,n]])=>`<button data-facfilter="${k}" aria-pressed="${facFilter===k}" class="${k==="due"&&n?"alert":""}"><b>${n}</b>${l}</button>`).join(""):"";
+  if(!all.length){$("#faculty").innerHTML=`<div class="empty"><b>No faculty yet</b><span>Add a potential advisor with “Add faculty”, or paste your whole list at once with “Paste a list”.</span></div>`;return}
+  const match={all:()=>true,toEmail:f=>["Not contacted","To email"].includes(f.contact||"Not contacted"),awaiting:f=>AWAITING.includes(f.contact),
+    talking:f=>["Replied","Meeting scheduled","Met / talked","Supervisor"].includes(f.contact),due:followUpDue,closed:f=>CLOSED.includes(f.contact)&&f.contact!=="Supervisor"}[facFilter]||(()=>true);
+  const pr=f=>PRIORITY.indexOf(f.priority||"Medium");
+  const list=all.filter(match).sort((a,b)=>(followUpDue(b)-followUpDue(a))||(pr(a)-pr(b))||(a.institution||"").localeCompare(b.institution||"")||(a.name||"").localeCompare(b.name||""));
+  if(!list.length){$("#faculty").innerHTML=`<div class="empty"><b>Nobody in this group</b><span>Pick another group above.</span></div>`;return}
+  $("#faculty").innerHTML=list.map(f=>{
+    const fu=f.followUp?leftLabel(daysLeft(f.followUp)):null;
+    const showFu=f.followUp&&!CLOSED.includes(f.contact)&&!["Replied","Meeting scheduled","Met / talked"].includes(f.contact);
+    const warm=["Replied","Meeting scheduled","Met / talked","Supervisor"].includes(f.contact);
+    return `<article class="row">
+    <div class="when"><span class="eyebrow">${esc(f.institution||"")}</span>
+      ${showFu?`<span class="sub mono">Follow up</span><span class="left ${followUpDue(f)?"due":daysLeft(f.followUp)<=3?"soon":"later"}">${fmtDate(f.followUp).replace(/, \d{4}$/,"")}${followUpDue(f)?" · due":""}</span>`:""}
+      ${f.lastContact?`<span class="sub mono">Last ${fmtDate(f.lastContact).replace(/, \d{4}$/,"")}</span>`:""}</div>
+    <div class="body"><div class="top"><div style="min-width:0"><h3>${esc(f.name)}</h3><div class="sub">${esc(f.area||"")}${f.area&&f.programId?" · ":""}${f.programId?esc(progName(f.programId)):""}</div></div>
+      <div class="chips">${f.priority?`<span class="pill prio-${esc(f.priority)}">${esc(f.priority)} priority</span>`:""}${f.recruiting&&f.recruiting!=="Unknown"?`<span class="pill rec-${esc(f.recruiting)}">Recruiting: ${esc(f.recruiting)}</span>`:""}
+      <span class="pill ${warm?"Interview":f.contact==="To email"?"Drafting":CLOSED.includes(f.contact)?"Withdrawn":""}">${esc(f.contact||"Not contacted")}</span></div></div>
+      ${f.email||f.website?`<div class="contact-line">${f.email?`<span class="mono">${esc(f.email)}</span><button class="btn ghost" style="padding:2px 8px;font-size:12px" data-copy="${esc(f.email)}">Copy email</button>`:""}${f.website?`<a href="${esc(f.website)}" target="_blank" rel="noopener" style="color:var(--accent)">Website ↗</a>`:""}</div>`:""}
+      ${f.firstEmailed||f.replyDate?`<div class="outreach">${f.firstEmailed?`<span>First emailed <b class="mono">${fmtDate(f.firstEmailed)}</b></span>`:""}${f.replyDate?`<span>Replied <b class="mono">${fmtDate(f.replyDate)}</b></span>`:""}</div>`:""}
       ${f.fit?`<div class="notes"><b style="color:var(--fg)">Fit:</b> ${esc(f.fit)}</div>`:""}
       ${f.notes?`<div class="notes">${esc(f.notes)}</div>`:""}
-      <div class="foot"><button class="btn ghost" data-edit="faculty" data-id="${esc(f.id)}">Edit</button></div></div></article>`).join("");
+      <div class="foot">${["Not contacted","To email"].includes(f.contact||"Not contacted")?`<button class="btn" data-emailed="${esc(f.id)}">Mark emailed today</button>`:""}${AWAITING.includes(f.contact)?`<button class="btn" data-replied="${esc(f.id)}">Mark replied</button>`:""}<button class="btn ghost" data-edit="faculty" data-id="${esc(f.id)}">Edit</button></div></div></article>`}).join("");
 }
 function renderTimeline(){
   const ev=[];
@@ -284,6 +331,7 @@ function renderTimeline(){
     if(p.lettersDue)ev.push({d:p.lettersDue,kind:"letters",t:`${p.name} letters due`,s:"Recommenders submit"});
     if(p.waiverDeadline&&!["Not eligible","Granted","Denied","No fee"].includes(p.waiverStatus))ev.push({d:p.waiverDeadline,kind:"letters",t:`${p.name} fee waiver request`,s:p.waiverStatus||""})});
   state.milestones.forEach(m=>ev.push({d:m.date,kind:"milestone",t:m.title,s:m.notes||"",id:m.id}));
+  state.faculty.filter(f=>f.followUp&&!CLOSED.includes(f.contact)&&!["Replied","Meeting scheduled","Met / talked"].includes(f.contact)).forEach(f=>ev.push({d:f.followUp,kind:"milestone",t:`Follow up with ${f.name}`,s:f.institution||""}));
   ev.sort((a,b)=>(a.d||"").localeCompare(b.d||""));
   if(!ev.length){$("#timeline").innerHTML=`<div class="empty"><b>Nothing dated yet</b><span>Deadlines appear here as you add programs.</span></div>`;return}
   const today=new Date().toISOString().slice(0,10);let placed=false;
@@ -295,7 +343,7 @@ function renderTimeline(){
 /* ---------- editing ---------- */
 const FORMS={
   programs:[["name","Program","text"],["school","University / department","text"],["short","Short name (letters table)","text"],["status","Status","select",STATUSES],["deadline","Application deadline","date"],["deadlineNote","Deadline time / zone","text"],["lettersDue","Letters due (if different)","date"],["advisors","Target advisors (comma separated)","text"],["fee","Application fee","text"],["waiverStatus","Fee waiver","select",WAIVER],["waiverDeadline","Waiver request deadline","date"],["waiverNotes","Fee waiver details","area"],["url","Program page link","text"],["estimated","Date still to confirm","check"],["notes","Notes","area"]],
-  faculty:[["name","Name","text"],["institution","Institution","text"],["programId","Program","program"],["contact","Contact status","select",CONTACT],["lastContact","Last contact","date"],["fit","Research fit","area"],["notes","Notes","area"]],
+  faculty:[["name","Name","text"],["institution","Institution","text"],["area","Research area","text"],["programId","Program","program"],["priority","Priority","select",PRIORITY],["recruiting","Recruiting this cycle","select",RECRUITING],["email","Email","text"],["website","Website","text"],["contact","Outreach status","select",CONTACT],["firstEmailed","First emailed","date"],["lastContact","Last contact","date"],["followUp","Follow up on","date"],["replyDate","Replied on","date"],["fit","Research fit / what to mention","area"],["notes","Notes","area"]],
   recommenders:[["name","Name","text"],["role","Relationship","text"],["notes","Notes","area"]],
   milestones:[["title","Milestone","text"],["date","Date","date"],["notes","Notes","text"]]
 };
@@ -325,12 +373,43 @@ function openForm(coll,id){
   $("#dlg").showModal();
 }
 
+function openPasteFaculty(){
+  if(!db){toast("Sign in to save changes");return}
+  const f=$("#dlgForm");
+  f.innerHTML=`<h2 style="font-size:22px">Paste a faculty list</h2>
+    <p class="hint">One person per line: <b>Name, Institution, Research area, Website, Email</b>. Only the name is required; leave later columns off if you don't have them. Commas or tabs both work, so you can paste straight from a spreadsheet.</p>
+    <label for="f-paste">Faculty<textarea id="f-paste" name="paste" style="min-height:180px;font-family:var(--mono);font-size:13px" placeholder="Jane Doe, Example University, machine learning, https://example.edu/~jdoe, jdoe@example.edu&#10;John Roe, Sample Institute, robotics"></textarea></label>
+    <div class="grid2"><label for="f-paste-prio">Priority for all<select id="f-paste-prio" name="prio">${PRIORITY.map(o=>`<option ${o==="Medium"?"selected":""}>${o}</option>`).join("")}</select></label>
+    <label for="f-paste-prog">Program for all (optional)<select id="f-paste-prog" name="prog"><option value="">—</option>${state.programs.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("")}</select></label></div>
+    <div class="dlg-actions"><div></div><div style="display:flex;gap:8px"><button type="button" class="btn" id="cancel">Cancel</button><button class="btn primary" type="submit">Add all</button></div></div>`;
+  $("#cancel").onclick=()=>$("#dlg").close();
+  f.onsubmit=async e=>{e.preventDefault();const fd=new FormData(f);
+    const existing=new Set(state.faculty.map(x=>(x.name||"").toLowerCase().trim()));
+    const rows=(fd.get("paste")||"").toString().split(/\r?\n/).map(l=>l.trim()).filter(Boolean).map(l=>{
+      const c=(l.includes("\t")?l.split("\t"):l.split(",")).map(x=>x.trim());
+      return {name:c[0]||"",institution:c[1]||"",area:c[2]||"",website:c[3]||"",email:c[4]||"",priority:fd.get("prio"),recruiting:"Unknown",programId:fd.get("prog")||"",
+        contact:"To email",firstEmailed:"",lastContact:"",followUp:"",replyDate:"",fit:"",notes:""}}).filter(r=>r.name);
+    const fresh=rows.filter(r=>!existing.has(r.name.toLowerCase()));
+    if(!fresh.length){toast(rows.length?"Everyone on that list is already here":"Paste at least one name");return}
+    try{for(const r of fresh)await db.collection("faculty").add(r);$("#dlg").close();
+      toast(`Added ${fresh.length}${rows.length>fresh.length?` · skipped ${rows.length-fresh.length} already listed`:""}`)}catch(err){toast("Couldn't save: "+err.message)}};
+  $("#dlg").showModal();
+}
+
 document.addEventListener("click",async e=>{
   const t=e.target.closest("button");if(!t)return;
   if(t.dataset.tab){tab=t.dataset.tab;try{localStorage.setItem("phd-tab",tab)}catch(e){}showTab();return}
   if(t.dataset.signin!==undefined)return signIn();
   if(t.dataset.signout!==undefined)return auth.signOut();
   if(t.dataset.seed!==undefined){if(!fs)return toast("Sample data is already in this browser");return loadSeed(t)}
+  if(t.dataset.facfilter){facFilter=t.dataset.facfilter;return renderFaculty()}
+  if(t.dataset.pasteFaculty!==undefined)return openPasteFaculty();
+  if(t.dataset.copy){try{await navigator.clipboard.writeText(t.dataset.copy);toast("Email copied")}catch(err){toast(t.dataset.copy)}return}
+  if(t.dataset.emailed){if(!db)return toast("Sign in to save changes");const today=new Date().toISOString().slice(0,10);
+    const f=state.faculty.find(x=>x.id===t.dataset.emailed);const fu=new Date(Date.now()+10*864e5).toISOString().slice(0,10);
+    try{await db.collection("faculty").doc(f.id).update({contact:"Emailed",firstEmailed:f.firstEmailed||today,lastContact:today,followUp:fu});toast("Marked emailed · follow-up set for 10 days")}catch(err){toast("Couldn't save: "+err.message)}return}
+  if(t.dataset.replied){if(!db)return toast("Sign in to save changes");const today=new Date().toISOString().slice(0,10);
+    try{await db.collection("faculty").doc(t.dataset.replied).update({contact:"Replied",replyDate:today,lastContact:today});toast("Marked replied")}catch(err){toast("Couldn't save: "+err.message)}return}
   if(t.dataset.add)return openForm(t.dataset.add);
   if(t.dataset.edit)return openForm(t.dataset.edit,t.dataset.id);
   if(t.dataset.check){if(!db)return toast("Sign in to save changes");
@@ -408,9 +487,11 @@ const SEED={
   "rec-3":{name:"Prof. Pat Placeholder",role:"Undergraduate course instructor",notes:"Sample recommender.",letters:{}}
  },
  faculty:{
-  doe:{name:"Prof. Jane Doe",institution:"Oxford",programId:"oxford-cs",contact:"Emailed",lastContact:"2026-10-05",fit:"Sample: one line on why your work fits this group.",notes:"Sample entry. Follow up if no reply in two weeks."},
-  roe:{name:"Prof. John Roe",institution:"UC Berkeley",programId:"berkeley-eecs",contact:"Not contacted",lastContact:"",fit:"",notes:"Sample entry."},
-  placeholder:{name:"Prof. Sam Placeholder",institution:"Princeton",programId:"princeton-cs",contact:"Met / talked",lastContact:"2026-09-20",fit:"",notes:"Sample entry: met at a workshop poster session."}
+  doe:{name:"Prof. Jane Doe",institution:"Oxford",area:"Machine learning",programId:"oxford-cs",priority:"High",recruiting:"Yes",email:"jane.doe@example.edu",website:"https://example.edu/~jdoe",contact:"Emailed",firstEmailed:"2026-10-01",lastContact:"2026-10-01",followUp:"2026-10-11",replyDate:"",fit:"Sample: one line on why your work fits this group.",notes:"Sample entry. No reply yet, so the follow-up shows as due."},
+  roe:{name:"Prof. John Roe",institution:"UC Berkeley",area:"Robotics",programId:"berkeley-eecs",priority:"High",recruiting:"Unknown",email:"john.roe@example.edu",website:"",contact:"To email",firstEmailed:"",lastContact:"",followUp:"",replyDate:"",fit:"",notes:"Sample entry. Use “Mark emailed today” once the first email is sent."},
+  sample:{name:"Dr. Alex Sample",institution:"UC Berkeley",area:"Natural language processing",programId:"berkeley-eecs",priority:"Medium",recruiting:"Maybe",email:"",website:"",contact:"Replied",firstEmailed:"2026-09-22",lastContact:"2026-09-29",followUp:"",replyDate:"2026-09-29",fit:"",notes:"Sample entry: replied and suggested a call in November."},
+  placeholder:{name:"Prof. Sam Placeholder",institution:"Princeton",area:"Computer vision",programId:"princeton-cs",priority:"Medium",recruiting:"Yes",email:"",website:"",contact:"Met / talked",firstEmailed:"",lastContact:"2026-09-20",followUp:"",replyDate:"",fit:"",notes:"Sample entry: met at a workshop poster session."},
+  example:{name:"Prof. Robin Example",institution:"EPFL",area:"Systems",programId:"epfl-edic",priority:"Low",recruiting:"No",email:"",website:"",contact:"Not taking students",firstEmailed:"",lastContact:"",followUp:"",replyDate:"",fit:"",notes:"Sample entry: lab page says no openings this cycle."}
  },
  milestones:{
   "sop-draft":{title:"Finish first SoP draft",date:"2026-10-25",notes:"Sample milestone"},
