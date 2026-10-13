@@ -131,11 +131,22 @@ textarea{min-height:80px;resize:vertical}
 .combo-caret{all:unset;position:absolute;right:0;top:0;bottom:0;width:30px;display:grid;place-items:center;cursor:default;color:var(--fg)}
 .combo-caret svg{display:block}
 .combo-list{position:fixed;z-index:10;overflow-y:auto;overscroll-behavior:contain;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:4px 0;box-shadow:0 6px 20px rgba(10,16,22,.28);font:13px/1.3 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--fg);scrollbar-width:thin;scrollbar-color:var(--line) transparent}
-.combo-opt{padding:4px 12px 4px 26px;margin:0 4px;border-radius:4px;cursor:default;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:relative}
-.combo-opt.cur::before{content:"✓";position:absolute;left:8px}
+.combo-opt{padding:4px 12px;margin:0 4px;border-radius:4px;cursor:default;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:relative}
 .combo-opt[aria-selected="true"]{background:var(--accent);color:var(--surface)}
 .combo-opt b{font-weight:600}
-.combo-empty{padding:4px 12px 4px 26px;color:var(--muted)}
+.combo-empty{padding:4px 12px;color:var(--muted)}
+.field{display:grid;gap:4px;font-size:13px;color:var(--muted);min-width:0;grid-column:1/-1}
+.field>label{display:block}
+.chip.tag{display:inline-flex;align-items:center;gap:6px;color:var(--fg);background:var(--sunk)}
+.chip.tag button{all:unset;cursor:pointer;color:var(--muted);font-size:15px;line-height:1;padding:0 2px;border-radius:3px}
+.chip.tag button:hover{color:var(--due)}
+.optbox{display:grid;gap:2px;border:1px solid var(--line);border-radius:6px;background:var(--bg);padding:6px;max-height:172px;overflow-y:auto}
+.opt{display:flex;align-items:center;gap:8px;color:var(--fg);font-size:14px;padding:4px 6px;border-radius:4px;cursor:pointer}
+.opt input{width:auto;margin:0;flex:none}
+.opt .mono{margin-left:auto;color:var(--muted);font-size:13px;white-space:nowrap}
+.fac-insts{display:grid;gap:5px}
+.fac-insts .eyebrow{line-height:1.3}
+.chip .left{font:600 12px var(--mono);margin-left:4px}
 </style>
 </head>
 <body>
@@ -235,6 +246,9 @@ function lettersLine(p){
 }
 function waiverCls(p){if(["Requested","Granted","Denied","Not eligible"].includes(p.waiverStatus))return "hint";const n=daysLeft(p.waiverDeadline);return n!=null&&n<=14?"left due":"hint"}
 const active=p=>!["Rejected","Withdrawn"].includes(p.status);
+const facInsts=f=>Array.isArray(f.institutions)?f.institutions:(f.institution?[f.institution]:[]);
+const facProgs=f=>(Array.isArray(f.programIds)?f.programIds:(f.programId?[f.programId]:[])).map(id=>state.programs.find(p=>p.id===id)).filter(Boolean).sort((a,b)=>(a.deadline||"9").localeCompare(b.deadline||"9"));
+const tagChip=(k,v)=>`<span class="chip tag">${esc(v)}<input type="hidden" name="${k}" value="${esc(v)}"><button type="button" data-rmchip aria-label="Remove ${esc(v)}">×</button></span>`;
 const progName=id=>{const p=state.programs.find(x=>x.id===id);return p?p.name:"Unknown program"};
 
 function render(){
@@ -317,19 +331,21 @@ function renderFaculty(){
   const match={all:()=>true,toEmail:f=>["Not contacted","To email"].includes(f.contact||"Not contacted"),awaiting:f=>AWAITING.includes(f.contact),
     talking:f=>["Replied","Meeting scheduled","Met / talked","Supervisor"].includes(f.contact),due:followUpDue,closed:f=>CLOSED.includes(f.contact)&&f.contact!=="Supervisor"}[facFilter]||(()=>true);
   const pr=f=>PRIORITY.indexOf(f.priority||"Medium");
-  const list=all.filter(match).sort((a,b)=>(followUpDue(b)-followUpDue(a))||(pr(a)-pr(b))||(a.institution||"").localeCompare(b.institution||"")||(a.name||"").localeCompare(b.name||""));
+  const list=all.filter(match).sort((a,b)=>(followUpDue(b)-followUpDue(a))||(pr(a)-pr(b))||facInsts(a).join().localeCompare(facInsts(b).join())||(a.name||"").localeCompare(b.name||""));
   if(!list.length){$("#faculty").innerHTML=`<div class="empty"><b>Nobody in this group</b><span>Pick another group above.</span></div>`;return}
   $("#faculty").innerHTML=list.map(f=>{
     const fu=f.followUp?leftLabel(daysLeft(f.followUp)):null;
     const showFu=f.followUp&&!CLOSED.includes(f.contact)&&!["Replied","Meeting scheduled","Met / talked"].includes(f.contact);
     const warm=["Replied","Meeting scheduled","Met / talked","Supervisor"].includes(f.contact);
     return `<article class="row">
-    <div class="when"><span class="eyebrow">${esc(f.institution||"")}</span>
+    <div class="when"><div class="fac-insts">${facInsts(f).map(i=>`<span class="eyebrow">${esc(i)}</span>`).join("")}</div>
       ${showFu?`<span class="sub mono">Follow up</span><span class="left ${followUpDue(f)?"due":daysLeft(f.followUp)<=3?"soon":"later"}">${fmtDate(f.followUp).replace(/, \d{4}$/,"")}${followUpDue(f)?" · due":""}</span>`:""}
       ${f.lastContact?`<span class="sub mono">Last ${fmtDate(f.lastContact).replace(/, \d{4}$/,"")}</span>`:""}</div>
-    <div class="body"><div class="top"><div style="min-width:0"><h3>${esc(f.name)}</h3><div class="sub">${esc(f.area||"")}${f.area&&f.programId?" · ":""}${f.programId?esc(progName(f.programId)):""}</div></div>
+    <div class="body"><div class="top"><div style="min-width:0"><h3>${esc(f.name)}</h3><div class="sub">${esc(f.area||"")}</div></div>
       <div class="chips">${f.priority?`<span class="pill prio-${esc(f.priority)}">${esc(f.priority)} priority</span>`:""}${f.recruiting&&f.recruiting!=="Unknown"?`<span class="pill rec-${esc(f.recruiting)}">Recruiting: ${esc(f.recruiting)}</span>`:""}
       <span class="pill ${warm?"Interview":f.contact==="To email"?"Drafting":CLOSED.includes(f.contact)?"Withdrawn":""}">${esc(f.contact||"Not contacted")}</span></div></div>
+      ${facProgs(f).length?`<div class="chips">${facProgs(f).map(p=>{const [c,l]=leftLabel(daysLeft(p.deadline));const sent=["Submitted","Interview","Offer"].includes(p.status);
+        return `<span class="chip" title="${esc(p.name)}">${esc(p.short||p.name)}<span class="left ${sent||!active(p)?"later":c}">${sent?"Sent":!active(p)?esc(p.status):p.deadline?fmtDate(p.deadline).replace(/, \d{4}$/,"")+" · "+esc(l):"No date"}</span></span>`}).join("")}</div>`:""}
       ${f.email||f.website?`<div class="contact-line">${f.email?`<span class="mono">${esc(f.email)}</span><button class="btn ghost" style="padding:2px 8px;font-size:12px" data-copy="${esc(f.email)}">Copy email</button>`:""}${f.website?`<a href="${esc(f.website)}" target="_blank" rel="noopener" style="color:var(--accent)">Website ↗</a>`:""}</div>`:""}
       ${f.firstEmailed||f.replyDate?`<div class="outreach">${f.firstEmailed?`<span>First emailed <b class="mono">${fmtDate(f.firstEmailed)}</b></span>`:""}${f.replyDate?`<span>Replied <b class="mono">${fmtDate(f.replyDate)}</b></span>`:""}</div>`:""}
       ${f.fit?`<div class="notes"><b style="color:var(--fg)">Fit:</b> ${esc(f.fit)}</div>`:""}
@@ -342,7 +358,7 @@ function renderTimeline(){
     if(p.lettersDue)ev.push({d:p.lettersDue,kind:"letters",t:`${p.name} letters due`,s:"Recommenders submit"});
     if(p.waiverDeadline&&!["Not eligible","Granted","Denied","No fee"].includes(p.waiverStatus))ev.push({d:p.waiverDeadline,kind:"letters",t:`${p.name} fee waiver request`,s:p.waiverStatus||""})});
   state.milestones.forEach(m=>ev.push({d:m.date,kind:"milestone",t:m.title,s:m.notes||"",id:m.id}));
-  state.faculty.filter(f=>f.followUp&&!CLOSED.includes(f.contact)&&!["Replied","Meeting scheduled","Met / talked"].includes(f.contact)).forEach(f=>ev.push({d:f.followUp,kind:"milestone",t:`Follow up with ${f.name}`,s:f.institution||""}));
+  state.faculty.filter(f=>f.followUp&&!CLOSED.includes(f.contact)&&!["Replied","Meeting scheduled","Met / talked"].includes(f.contact)).forEach(f=>ev.push({d:f.followUp,kind:"milestone",t:`Follow up with ${f.name}`,s:facInsts(f).join(" · ")}));
   ev.sort((a,b)=>(a.d||"").localeCompare(b.d||""));
   if(!ev.length){$("#timeline").innerHTML=`<div class="empty"><b>Nothing dated yet</b><span>Deadlines appear here as you add programs.</span></div>`;return}
   const today=new Date().toISOString().slice(0,10);let placed=false;
@@ -354,38 +370,40 @@ function renderTimeline(){
 /* ---------- editing ---------- */
 const FORMS={
   programs:[["name","Program","text"],["school","University / department","text"],["short","Short name (letters table)","text"],["status","Status","select",STATUSES],["deadline","Application deadline","date"],["deadlineNote","Deadline time / zone","text"],["lettersDue","Letters due (if different)","date"],["advisors","Target advisors (comma separated)","text"],["fee","Application fee","text"],["waiverStatus","Fee waiver","select",WAIVER],["waiverDeadline","Waiver request deadline","date"],["waiverNotes","Fee waiver details","area"],["url","Program page link","text"],["estimated","Date still to confirm","check"],["notes","Notes","area"]],
-  faculty:[["name","Name","text"],["institution","Institution","inst"],["area","Research area","text"],["programId","Program","program"],["priority","Priority","select",PRIORITY],["recruiting","Recruiting this cycle","select",RECRUITING],["email","Email","text"],["website","Website","text"],["contact","Outreach status","select",CONTACT],["firstEmailed","First emailed","date"],["lastContact","Last contact","date"],["followUp","Follow up on","date"],["replyDate","Replied on","date"],["fit","Research fit / what to mention","area"],["notes","Notes","area"]],
+  faculty:[["name","Name","text"],["institutions","Institutions","insts"],["area","Research area","text"],["programIds","Programs applying through","programs"],["priority","Priority","select",PRIORITY],["recruiting","Recruiting this cycle","select",RECRUITING],["email","Email","text"],["website","Website","text"],["contact","Outreach status","select",CONTACT],["firstEmailed","First emailed","date"],["lastContact","Last contact","date"],["followUp","Follow up on","date"],["replyDate","Replied on","date"],["fit","Research fit / what to mention","area"],["notes","Notes","area"]],
   recommenders:[["name","Name","text"],["role","Relationship","text"],["notes","Notes","area"]],
   milestones:[["title","Milestone","text"],["date","Date","date"],["notes","Notes","text"]]
 };
 const TITLES={programs:"program",faculty:"faculty member",recommenders:"recommender",milestones:"milestone"};
 function setupCombo(inp,opts){
-  const box=inp.parentNode.querySelector(".combo-list"),caret=inp.parentNode.querySelector(".combo-caret");let items=[],idx=-1;
+  const wrap=inp.closest(".field"),chips=wrap.querySelector("[data-chips]"),box=wrap.querySelector(".combo-list"),caret=wrap.querySelector(".combo-caret");let items=[],idx=-1;
+  const chosen=()=>[...chips.querySelectorAll("input")].map(i=>i.value.toLowerCase());
   const place=()=>{const r=inp.getBoundingClientRect(),below=innerHeight-r.bottom-12,above=r.top-12,up=below<160&&above>below;
     box.style.left=r.left+"px";box.style.width=r.width+"px";box.style.maxHeight=Math.max(96,Math.min(264,up?above:below))+"px";
     box.style.top=up?"auto":(r.bottom+4)+"px";box.style.bottom=up?(innerHeight-r.top+4)+"px":"auto"};
   const close=()=>{box.hidden=true;idx=-1;inp.setAttribute("aria-expanded","false");inp.removeAttribute("aria-activedescendant")};
   const mark=scroll=>{box.querySelectorAll(".combo-opt").forEach((c,i)=>{c.setAttribute("aria-selected",i===idx);if(i===idx){inp.setAttribute("aria-activedescendant",c.id);if(scroll)c.scrollIntoView({block:"nearest"})}})};
-  const show=all=>{const q=all?"":inp.value.trim().toLowerCase(),cur=inp.value.trim();
-    items=q?[...opts.filter(o=>o.toLowerCase().startsWith(q)),...opts.filter(o=>o.toLowerCase().indexOf(q)>0)]:opts;
+  const show=all=>{const q=all?"":inp.value.trim().toLowerCase(),have=chosen(),pool=opts.filter(o=>!have.includes(o.toLowerCase()));
+    items=q?[...pool.filter(o=>o.toLowerCase().startsWith(q)),...pool.filter(o=>o.toLowerCase().indexOf(q)>0)]:pool;
     box.innerHTML=items.length?items.map((o,i)=>{const at=q?o.toLowerCase().indexOf(q):-1;
-      return `<span class="combo-opt${o===cur?" cur":""}" style="display:block" role="option" id="${inp.id}-o${i}" data-i="${i}" aria-selected="false">${at<0?esc(o):esc(o.slice(0,at))+"<b>"+esc(o.slice(at,at+q.length))+"</b>"+esc(o.slice(at+q.length))}</span>`}).join("")
-      :`<span class="combo-empty" style="display:block">Not in the list. It will be saved as you typed it.</span>`;
-    box.hidden=false;box.scrollTop=0;inp.setAttribute("aria-expanded","true");place();
-    idx=all?items.indexOf(inp.value.trim()):-1;if(idx>=0)mark(true)};
-  const pick=i=>{inp.value=items[i];close()};
+      return `<span class="combo-opt" style="display:block" role="option" id="${inp.id}-o${i}" data-i="${i}" aria-selected="false">${at<0?esc(o):esc(o.slice(0,at))+"<b>"+esc(o.slice(at,at+q.length))+"</b>"+esc(o.slice(at+q.length))}</span>`}).join("")
+      :`<span class="combo-empty" style="display:block">Not in the list. Press Enter to add it as typed.</span>`;
+    box.hidden=false;box.scrollTop=0;idx=-1;inp.setAttribute("aria-expanded","true");place()};
+  const add=v=>{v=(v||"").trim();if(v&&!chosen().includes(v.toLowerCase())){chips.insertAdjacentHTML("beforeend",tagChip(inp.dataset.combo,v));chips.hidden=false}inp.value="";close()};
   inp.addEventListener("input",()=>show(false));
   inp.addEventListener("click",()=>{if(box.hidden)show(true)});
   inp.addEventListener("blur",close);
   inp.addEventListener("keydown",e=>{
     if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();if(box.hidden){show(true);return}if(!items.length)return;
       idx=e.key==="ArrowDown"?(idx+1)%items.length:(idx<=0?items.length:idx)-1;mark(true)}
-    else if(e.key==="Enter"&&!box.hidden&&idx>=0){e.preventDefault();pick(idx)}
+    else if(e.key==="Enter"&&(inp.value.trim()||(!box.hidden&&idx>=0))){e.preventDefault();add(!box.hidden&&idx>=0?items[idx]:inp.value)}
+    else if(e.key==="Backspace"&&!inp.value&&chips.lastElementChild){chips.lastElementChild.remove();chips.hidden=!chips.children.length;if(!box.hidden)show(true)}
     else if(e.key==="Escape"&&!box.hidden){e.preventDefault();close()}});
+  chips.addEventListener("click",e=>{const b=e.target.closest("[data-rmchip]");if(b){b.parentNode.remove();chips.hidden=!chips.children.length;inp.focus()}});
   caret.addEventListener("mousedown",e=>e.preventDefault());
-  caret.addEventListener("click",e=>{e.preventDefault();if(box.hidden){inp.focus();show(true)}else close()});
+  caret.addEventListener("click",()=>{if(box.hidden){inp.focus();show(true)}else close()});
   box.addEventListener("mousedown",e=>e.preventDefault());
-  box.addEventListener("click",e=>{e.preventDefault();const o=e.target.closest(".combo-opt");if(o)pick(+o.dataset.i)});
+  box.addEventListener("click",e=>{const o=e.target.closest(".combo-opt");if(o)add(items[+o.dataset.i])});
   box.addEventListener("mousemove",e=>{const o=e.target.closest(".combo-opt");if(o&&+o.dataset.i!==idx){idx=+o.dataset.i;mark(false)}});
   $("#dlg").onscroll=()=>{if(!box.hidden)place()};
 }
@@ -397,18 +415,24 @@ function openForm(coll,id){
     const v=item[k]??"";const fid=`f-${coll}-${k}`;
     if(t==="area")return `<label style="grid-column:1/-1" for="${fid}">${l}<textarea id="${fid}" name="${k}">${esc(v)}</textarea></label>`;
     if(t==="select")return `<label for="${fid}">${l}<select id="${fid}" name="${k}">${opts.map(o=>`<option ${o===v?"selected":""}>${o}</option>`).join("")}</select></label>`;
-    if(t==="program")return `<label for="${fid}">${l}<select id="${fid}" name="${k}"><option value="">—</option>${state.programs.map(p=>`<option value="${esc(p.id)}" ${p.id===v?"selected":""}>${esc(p.name)}</option>`).join("")}</select></label>`;
-    if(t==="inst")return `<label for="${fid}">${l}<span class="combo"><input id="${fid}" type="text" name="${k}" value="${esc(v)}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${fid}-list" placeholder="Type or pick from the list" data-combo><button type="button" class="combo-caret" tabindex="-1" aria-label="Show institutions"><svg width="10" height="7" viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 1.5l5 5 5-5"/></svg></button><span class="combo-list" id="${fid}-list" role="listbox" hidden></span></span></label>`;
+    if(t==="insts"){const vals=facInsts(item);
+      return `<div class="field"><label for="${fid}">${l}</label><div class="chips" data-chips ${vals.length?"":"hidden"}>${vals.map(x=>tagChip(k,x)).join("")}</div>
+        <span class="combo"><input id="${fid}" type="text" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${fid}-list" placeholder="Type or pick, then add another for joint affiliations" data-combo="${k}"><button type="button" class="combo-caret" tabindex="-1" aria-label="Show institutions"><svg width="10" height="7" viewBox="0 0 12 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 1.5l5 5 5-5"/></svg></button><span class="combo-list" id="${fid}-list" role="listbox" hidden></span></span></div>`}
+    if(t==="programs"){const on=facProgs(item).map(p=>p.id);const ps=state.programs.slice().sort((a,b)=>(a.deadline||"9").localeCompare(b.deadline||"9"));
+      return `<div class="field" role="group" aria-label="${l}"><span>${l}</span>${ps.length?`<div class="optbox">${ps.map(p=>`<label class="opt"><input type="checkbox" name="${k}" value="${esc(p.id)}" ${on.includes(p.id)?"checked":""}>${esc(p.name)}<span class="mono">${p.deadline?fmtDate(p.deadline):"No date"}</span></label>`).join("")}</div><span class="hint">Tick every program you could reach this person through. Each deadline shows on their card.</span>`:`<span class="hint">Add your programs first, then link them here.</span>`}</div>`}
     if(t==="check")return `<label for="${fid}" style="display:flex;gap:8px;align-items:center;align-self:end"><input type="checkbox" id="${fid}" name="${k}" style="width:auto" ${v?"checked":""}>${l}</label>`;
     return `<label for="${fid}">${l}<input id="${fid}" type="${t}" name="${k}" value="${esc(v)}"></label>`}).join("")}</div>
     <div class="dlg-actions"><div>${id?`<button type="button" class="btn danger" id="del">Delete</button>`:""}</div>
     <div style="display:flex;gap:8px"><button type="button" class="btn" id="cancel">Cancel</button><button class="btn primary" type="submit">Save</button></div></div>`;
   $("#cancel").onclick=()=>$("#dlg").close();
-  f.querySelectorAll("[data-combo]").forEach(i=>setupCombo(i,[...new Set([...state.faculty.map(x=>(x.institution||"").trim()).filter(Boolean),...INSTITUTIONS])]));
+  f.querySelectorAll("[data-combo]").forEach(i=>setupCombo(i,[...new Set([...state.faculty.flatMap(facInsts).map(x=>(x||"").trim()).filter(Boolean),...INSTITUTIONS])]));
   if(id)$("#del").onclick=async e=>{if(!armed){armed=true;e.target.textContent="Confirm delete";return}
     try{await db.collection(coll).doc(id).delete();$("#dlg").close();toast("Deleted")}catch(err){toast("Couldn't delete: "+err.message)}};
   f.onsubmit=async e=>{e.preventDefault();const fd=new FormData(f);const out={};
-    FORMS[coll].forEach(([k,,t])=>{out[k]=t==="check"?fd.get(k)==="on":(fd.get(k)||"").toString().trim()});
+    FORMS[coll].forEach(([k,,t])=>{
+      if(t==="insts"){const draft=(f.querySelector(`[data-combo="${k}"]`).value||"").trim();const v=fd.getAll(k).map(String);if(draft&&!v.some(x=>x.toLowerCase()===draft.toLowerCase()))v.push(draft);out[k]=v}
+      else if(t==="programs")out[k]=fd.getAll(k).map(String);
+      else out[k]=t==="check"?fd.get(k)==="on":(fd.get(k)||"").toString().trim()});
     if(!(out.name||out.title)){toast("Give it a name first");return}
     try{if(id)await db.collection(coll).doc(id).update(out);
       else{if(coll==="programs")out.checklist={};if(coll==="recommenders")out.letters={};await db.collection(coll).add(out)}
@@ -420,7 +444,7 @@ function openPasteFaculty(){
   if(!db){toast("Sign in to save changes");return}
   const f=$("#dlgForm");
   f.innerHTML=`<h2 style="font-size:22px">Paste a faculty list</h2>
-    <p class="hint">One person per line: <b>Name, Institution, Research area, Website, Email</b>. Only the name is required; leave later columns off if you don't have them. Commas or tabs both work, so you can paste straight from a spreadsheet.</p>
+    <p class="hint">One person per line: <b>Name, Institution, Research area, Website, Email</b>. Only the name is required; leave later columns off if you don't have them. For a joint affiliation, separate institutions with a semicolon. Commas or tabs both work, so you can paste straight from a spreadsheet.</p>
     <label for="f-paste">Faculty<textarea id="f-paste" name="paste" style="min-height:180px;font-family:var(--mono);font-size:13px" placeholder="Jane Doe, Example University, machine learning, https://example.edu/~jdoe, jdoe@example.edu&#10;John Roe, Sample Institute, robotics"></textarea></label>
     <div class="grid2"><label for="f-paste-prio">Priority for all<select id="f-paste-prio" name="prio">${PRIORITY.map(o=>`<option ${o==="Medium"?"selected":""}>${o}</option>`).join("")}</select></label>
     <label for="f-paste-prog">Program for all (optional)<select id="f-paste-prog" name="prog"><option value="">—</option>${state.programs.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("")}</select></label></div>
@@ -430,7 +454,7 @@ function openPasteFaculty(){
     const existing=new Set(state.faculty.map(x=>(x.name||"").toLowerCase().trim()));
     const rows=(fd.get("paste")||"").toString().split(/\r?\n/).map(l=>l.trim()).filter(Boolean).map(l=>{
       const c=(l.includes("\t")?l.split("\t"):l.split(",")).map(x=>x.trim());
-      return {name:c[0]||"",institution:c[1]||"",area:c[2]||"",website:c[3]||"",email:c[4]||"",priority:fd.get("prio"),recruiting:"Unknown",programId:fd.get("prog")||"",
+      return {name:c[0]||"",institutions:(c[1]||"").split(/\s*;\s*|\s+\/\s+/).filter(Boolean),area:c[2]||"",website:c[3]||"",email:c[4]||"",priority:fd.get("prio"),recruiting:"Unknown",programIds:fd.get("prog")?[fd.get("prog")]:[],
         contact:"To email",firstEmailed:"",lastContact:"",followUp:"",replyDate:"",fit:"",notes:""}}).filter(r=>r.name);
     const fresh=rows.filter(r=>!existing.has(r.name.toLowerCase()));
     if(!fresh.length){toast(rows.length?"Everyone on that list is already here":"Paste at least one name");return}
@@ -530,11 +554,11 @@ const SEED={
   "rec-3":{name:"Prof. Pat Placeholder",role:"Undergraduate course instructor",notes:"Sample recommender.",letters:{}}
  },
  faculty:{
-  doe:{name:"Prof. Jane Doe",institution:"Oxford",area:"Machine learning",programId:"oxford-cs",priority:"High",recruiting:"Yes",email:"jane.doe@example.edu",website:"https://example.edu/~jdoe",contact:"Emailed",firstEmailed:"2026-10-01",lastContact:"2026-10-01",followUp:"2026-10-11",replyDate:"",fit:"Sample: one line on why your work fits this group.",notes:"Sample entry. No reply yet, so the follow-up shows as due."},
-  roe:{name:"Prof. John Roe",institution:"UC Berkeley",area:"Robotics",programId:"berkeley-eecs",priority:"High",recruiting:"Unknown",email:"john.roe@example.edu",website:"",contact:"To email",firstEmailed:"",lastContact:"",followUp:"",replyDate:"",fit:"",notes:"Sample entry. Use “Mark emailed today” once the first email is sent."},
-  sample:{name:"Dr. Alex Sample",institution:"UC Berkeley",area:"Natural language processing",programId:"berkeley-eecs",priority:"Medium",recruiting:"Maybe",email:"",website:"",contact:"Replied",firstEmailed:"2026-09-22",lastContact:"2026-09-29",followUp:"",replyDate:"2026-09-29",fit:"",notes:"Sample entry: replied and suggested a call in November."},
-  placeholder:{name:"Prof. Sam Placeholder",institution:"Princeton",area:"Computer vision",programId:"princeton-cs",priority:"Medium",recruiting:"Yes",email:"",website:"",contact:"Met / talked",firstEmailed:"",lastContact:"2026-09-20",followUp:"",replyDate:"",fit:"",notes:"Sample entry: met at a workshop poster session."},
-  example:{name:"Prof. Robin Example",institution:"EPFL",area:"Systems",programId:"epfl-edic",priority:"Low",recruiting:"No",email:"",website:"",contact:"Not taking students",firstEmailed:"",lastContact:"",followUp:"",replyDate:"",fit:"",notes:"Sample entry: lab page says no openings this cycle."}
+  doe:{name:"Prof. Jane Doe",institutions:["Oxford","EPFL"],area:"Machine learning",programIds:["oxford-cs","epfl-edic"],priority:"High",recruiting:"Yes",email:"jane.doe@example.edu",website:"https://example.edu/~jdoe",contact:"Emailed",firstEmailed:"2026-10-01",lastContact:"2026-10-01",followUp:"2026-10-11",replyDate:"",fit:"Sample: one line on why your work fits this group.",notes:"Sample entry. Joint appointment, so two programs and two deadlines are linked. No reply yet, so the follow-up shows as due."},
+  roe:{name:"Prof. John Roe",institutions:["UC Berkeley"],area:"Robotics",programIds:["berkeley-eecs"],priority:"High",recruiting:"Unknown",email:"john.roe@example.edu",website:"",contact:"To email",firstEmailed:"",lastContact:"",followUp:"",replyDate:"",fit:"",notes:"Sample entry. Use “Mark emailed today” once the first email is sent."},
+  sample:{name:"Dr. Alex Sample",institutions:["UC Berkeley"],area:"Natural language processing",programIds:["berkeley-eecs"],priority:"Medium",recruiting:"Maybe",email:"",website:"",contact:"Replied",firstEmailed:"2026-09-22",lastContact:"2026-09-29",followUp:"",replyDate:"2026-09-29",fit:"",notes:"Sample entry: replied and suggested a call in November."},
+  placeholder:{name:"Prof. Sam Placeholder",institutions:["Princeton"],area:"Computer vision",programIds:["princeton-cs"],priority:"Medium",recruiting:"Yes",email:"",website:"",contact:"Met / talked",firstEmailed:"",lastContact:"2026-09-20",followUp:"",replyDate:"",fit:"",notes:"Sample entry: met at a workshop poster session."},
+  example:{name:"Prof. Robin Example",institutions:["EPFL"],area:"Systems",programIds:["epfl-edic"],priority:"Low",recruiting:"No",email:"",website:"",contact:"Not taking students",firstEmailed:"",lastContact:"",followUp:"",replyDate:"",fit:"",notes:"Sample entry: lab page says no openings this cycle."}
  },
  milestones:{
   "sop-draft":{title:"Finish first SoP draft",date:"2026-10-25",notes:"Sample milestone"},
