@@ -193,7 +193,7 @@ textarea{min-height:80px;resize:vertical}
 
   <section id="tab-letters" hidden>
     <div class="bar" style="margin-bottom:12px">
-      <span class="hint">Most programs want three letters. Set each cell as you send invitations and letters land.</span>
+      <span class="hint">Columns run in order of letter deadline (the application deadline when letters are due with it). Set each cell as you send invitations and letters land.</span>
       <button class="btn primary" data-add="recommenders">Add recommender</button>
     </div>
     <div id="letters"></div>
@@ -327,9 +327,12 @@ function renderPrograms(){
       </div></article>`}).join("");
 }
 function renderLetters(){
-  const progs=state.programs.filter(active).sort((a,b)=>(a.deadline||"9").localeCompare(b.deadline||"9"));
+  const due=p=>p.lettersDue||p.deadline||"";
+  const progs=state.programs.filter(active).sort((a,b)=>(due(a)||"9").localeCompare(due(b)||"9")||(a.deadline||"9").localeCompare(b.deadline||"9"));
   if(!state.recommenders.length){$("#letters").innerHTML=`<div class="empty"><b>No recommenders yet</b><span>Add the people writing your letters with “Add recommender”.</span></div>`;return}
-  const head=`<tr><th>Recommender</th>${progs.map(p=>`<th title="${esc(p.name)}">${esc(p.short||p.name)}<div class="sub mono" style="font-weight:400">${p.lettersDue?fmtDate(p.lettersDue).replace(/, \d{4}$/,""):fmtDate(p.deadline).replace(/, \d{4}$/,"")}</div></th>`).join("")}<th></th></tr>`;
+  const head=`<tr><th>Recommender</th>${progs.map(p=>{const rs=state.recommenders.filter(r=>{const v=(r.letters||{})[p.id];return v&&v!=="—"}),sub=rs.filter(r=>r.letters[p.id]==="Submitted").length,done=rs.length&&sub===rs.length;
+    const [c,l]=leftLabel(daysLeft(due(p)));
+    return `<th title="${esc(p.name)}${p.lettersDue?"":" · letters due with the application"}">${esc(p.short||p.name)}<div class="sub mono" style="font-weight:400">${due(p)?fmtDate(due(p)).replace(/, \d{4}$/,""):"No date"}</div>${due(p)?`<div class="left ${done?"later":c}" style="font:600 12px var(--mono)">${done?"All in":esc(l)}</div>`:""}${rs.length?`<div class="sub mono" style="font-weight:400;font-size:12px">${sub}/${rs.length} in</div>`:""}</th>`}).join("")}<th></th></tr>`;
   const rows=state.recommenders.map(r=>`<tr><td><b>${esc(r.name)}</b><div class="sub">${esc(r.role||"")}</div>${r.notes?`<div class="hint" style="max-width:28ch">${esc(r.notes)}</div>`:""}</td>
     ${progs.map(p=>{const v=(r.letters||{})[p.id]||"—";return `<td><select data-letter="${esc(r.id)}" data-p="${esc(p.id)}" class="${v==="Submitted"?"submitted":v==="Requested"?"requested":""}" aria-label="${esc(r.name)} letter for ${esc(p.name)}">${LETTER.map(o=>`<option ${o===v?"selected":""}>${o}</option>`).join("")}</select></td>`}).join("")}
     <td><button class="btn ghost" data-edit="recommenders" data-id="${esc(r.id)}">Edit</button></td></tr>`).join("");
